@@ -8,7 +8,7 @@ use App\Http\Controllers\Api\MyLibraryController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\ReadingProgressController;
-
+use App\Http\Controllers\Api\BookmarkController;
 
 
 /*
@@ -19,7 +19,7 @@ use App\Http\Controllers\Api\ReadingProgressController;
 | These routes are available without authentication.
 | Only published books and active categories should be exposed by
 | their respective controllers.
-|
+|use App\Http\Controllers\Api\BookmarkController;
 */
 
 Route::get('/books', [
@@ -187,5 +187,33 @@ Route::middleware('auth:sanctum')->group(function () {
     ]);
 
 
-    
+    /*
+    |--------------------------------------------------------------------------
+    | Bookmarks
+    |--------------------------------------------------------------------------
+    |
+    |   Authenticated customers can create, view, and remove bookmarks
+    |   for books they are currently entitled to read.
+    |
+    */
+
+    Route::get('/books/{uuid}/bookmarks', [
+    BookmarkController::class,
+    'index',
+    ]);
+
+    Route::post('/books/{uuid}/bookmarks', [
+    BookmarkController::class,
+    'store',
+    ]);
+
+    Route::delete('/books/{uuid}/bookmarks/{bookmark}', [
+    BookmarkController::class,
+    'destroy',
+    ]);
+
+
+
+
+
 });

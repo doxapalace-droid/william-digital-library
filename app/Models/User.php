@@ -78,4 +78,13 @@ class User extends Authenticatable
     {
     return $this->hasMany(ReadingProgress::class);
     }
+
+
+        /**
+ * Bookmarks created by this customer.
+ */
+    public function bookmarks(): HasMany
+    {
+    return $this->hasMany(Bookmark::class);
+    }
 }

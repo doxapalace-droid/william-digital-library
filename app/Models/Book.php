@@ -81,6 +81,13 @@ class Book extends Model
             ->withTimestamps();
     }
    
+    /**
+ * Bookmarks customers have created for this book.
+ */
+    public function bookmarks(): HasMany
+    {
+    return $this->hasMany(Bookmark::class);
+    }
    
 
 
