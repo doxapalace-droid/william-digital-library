@@ -57,6 +57,18 @@ class Book extends Model
         return $this->hasMany(BookEntitlement::class);
     }
 
+
+    /**
+ * Reading progress records for this book.
+ *
+ * Each record represents a customer's current
+ * reading position and progress in this book.
+ */
+    public function readingProgress(): HasMany
+    {
+    return $this->hasMany(ReadingProgress::class);
+    }
+
     /**
      * Categories assigned to this book.
      *
@@ -68,6 +80,7 @@ class Book extends Model
         return $this->belongsToMany(Category::class)
             ->withTimestamps();
     }
+   
    
 
 

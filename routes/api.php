@@ -7,6 +7,9 @@ use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\MyLibraryController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\ReadingProgressController;
+
+
 
 /*
 |--------------------------------------------------------------------------
@@ -160,4 +163,29 @@ Route::middleware('auth:sanctum')->group(function () {
         BookDownloadController::class,
         'download',
     ]);
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Reading Progress
+    |--------------------------------------------------------------------------
+    |
+    | Customers may retrieve and update their reading position only while
+    | authenticated. The controller additionally verifies that the customer
+        | has a valid entitlement to the requested book.
+    |
+    */
+
+    Route::get('/books/{uuid}/progress', [
+    ReadingProgressController::class,
+    'show',
+    ]);
+
+    Route::put('/books/{uuid}/progress', [
+    ReadingProgressController::class,
+    'update',
+    ]);
+
+
+    
 });
