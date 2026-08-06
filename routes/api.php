@@ -3,13 +3,13 @@
 use App\Http\Controllers\Api\BookController;
 use App\Http\Controllers\Api\BookDownloadController;
 use App\Http\Controllers\Api\BookReaderController;
+use App\Http\Controllers\Api\BookmarkController;
 use App\Http\Controllers\Api\CategoryController;
+use App\Http\Controllers\Api\HighlightController;
 use App\Http\Controllers\Api\MyLibraryController;
+use App\Http\Controllers\Api\ReadingProgressController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Api\ReadingProgressController;
-use App\Http\Controllers\Api\BookmarkController;
-
 
 /*
 |--------------------------------------------------------------------------
@@ -19,7 +19,7 @@ use App\Http\Controllers\Api\BookmarkController;
 | These routes are available without authentication.
 | Only published books and active categories should be exposed by
 | their respective controllers.
-|use App\Http\Controllers\Api\BookmarkController;
+|
 */
 
 Route::get('/books', [
@@ -164,7 +164,6 @@ Route::middleware('auth:sanctum')->group(function () {
         'download',
     ]);
 
-
     /*
     |--------------------------------------------------------------------------
     | Reading Progress
@@ -172,48 +171,72 @@ Route::middleware('auth:sanctum')->group(function () {
     |
     | Customers may retrieve and update their reading position only while
     | authenticated. The controller additionally verifies that the customer
-        | has a valid entitlement to the requested book.
+    | has a valid entitlement to the requested book.
     |
     */
 
     Route::get('/books/{uuid}/progress', [
-    ReadingProgressController::class,
-    'show',
+        ReadingProgressController::class,
+        'show',
     ]);
 
     Route::put('/books/{uuid}/progress', [
-    ReadingProgressController::class,
-    'update',
+        ReadingProgressController::class,
+        'update',
     ]);
-
 
     /*
     |--------------------------------------------------------------------------
     | Bookmarks
     |--------------------------------------------------------------------------
     |
-    |   Authenticated customers can create, view, and remove bookmarks
-    |   for books they are currently entitled to read.
+    | Authenticated customers can create, view, and remove bookmarks
+    | for books they are currently entitled to read.
     |
     */
 
     Route::get('/books/{uuid}/bookmarks', [
-    BookmarkController::class,
-    'index',
+        BookmarkController::class,
+        'index',
     ]);
 
     Route::post('/books/{uuid}/bookmarks', [
-    BookmarkController::class,
-    'store',
+        BookmarkController::class,
+        'store',
     ]);
 
     Route::delete('/books/{uuid}/bookmarks/{bookmark}', [
-    BookmarkController::class,
-    'destroy',
+        BookmarkController::class,
+        'destroy',
     ]);
 
+    /*
+    |--------------------------------------------------------------------------
+    | Highlights
+    |--------------------------------------------------------------------------
+    |
+    | Authenticated customers can create, view, update, and remove
+    | highlights for books they are currently entitled to read.
+    |
+    */
 
+    Route::get('/books/{uuid}/highlights', [
+        HighlightController::class,
+        'index',
+    ]);
 
+    Route::post('/books/{uuid}/highlights', [
+        HighlightController::class,
+        'store',
+    ]);
 
+    Route::put('/books/{uuid}/highlights/{highlight}', [
+        HighlightController::class,
+        'update',
+    ]);
 
+    Route::delete('/books/{uuid}/highlights/{highlight}', [
+        HighlightController::class,
+        'destroy',
+    ]);
 });

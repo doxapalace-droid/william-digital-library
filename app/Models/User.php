@@ -87,4 +87,16 @@ class User extends Authenticatable
     {
     return $this->hasMany(Bookmark::class);
     }
+
+
+        /**
+ * Highlights created by this user.
+ */
+    public function highlights(): HasMany
+    {
+    return $this->hasMany(Highlight::class);
+    }
+
+
+    
 }
