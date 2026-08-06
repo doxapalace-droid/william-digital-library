@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\BookDownloadController;
 use App\Http\Controllers\Api\BookReaderController;
 use App\Http\Controllers\Api\BookmarkController;
 use App\Http\Controllers\Api\CategoryController;
+use App\Http\Controllers\Api\ContinueReadingController;
 use App\Http\Controllers\Api\HighlightController;
 use App\Http\Controllers\Api\MyLibraryController;
 use App\Http\Controllers\Api\ReadingProgressController;
@@ -133,6 +134,21 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/my-library', [
         MyLibraryController::class,
+        'index',
+    ]);
+
+    /*
+    |--------------------------------------------------------------------------
+    | Continue Reading
+    |--------------------------------------------------------------------------
+    |
+    | Returns books the authenticated user has started reading.
+    | Books should be ordered by the user's most recent reading activity.
+    |
+    */
+
+    Route::get('/continue-reading', [
+        ContinueReadingController::class,
         'index',
     ]);
 
