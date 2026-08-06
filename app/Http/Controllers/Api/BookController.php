@@ -15,55 +15,125 @@ class BookController extends Controller
     /**
      * Display a listing of published books.
      */
-    public function index(Request $request)
-    {
-        $books = Book::query()
-            ->with([
-                'categories:id,uuid,name,slug',
-            ])
-            ->where('is_published', true)
+   public function index(Request $request)
+{
+    /*
+    |--------------------------------------------------------------------------
+    | Validate catalogue filters
+    |--------------------------------------------------------------------------
+    */
 
-            /*
-            |--------------------------------------------------------------------------
-            | Optional category filter
-            |--------------------------------------------------------------------------
-            |
-            | Example:
-            | /api/books?category=new-creation-realities
-            |
-            */
-            ->when(
-                $request->filled('category'),
-                function ($query) use ($request) {
-                    $query->whereHas('categories', function ($categoryQuery) use ($request) {
+    $validated = $request->validate([
+        'search' => ['nullable', 'string', 'max:255'],
+        'category' => ['nullable', 'string', 'max:255'],
+        'featured' => ['nullable', 'boolean'],
+        'sort' => [
+            'nullable',
+            Rule::in([
+                'newest',
+                'oldest',
+                'title_asc',
+                'title_desc',
+                'price_asc',
+                'price_desc',
+            ]),
+        ],
+    ]);
+
+    $books = Book::query()
+        ->with([
+            'categories:id,uuid,name,slug',
+        ])
+        ->where('is_published', true)
+
+        /*
+        |--------------------------------------------------------------------------
+        | Search
+        |--------------------------------------------------------------------------
+        |
+        | Searches title, subtitle, author and description.
+        |
+        | Example:
+        | /api/books?search=dominion
+        |
+        */
+        ->when(
+            ! empty($validated['search']),
+            function ($query) use ($validated) {
+                $search = $validated['search'];
+
+                $query->where(function ($searchQuery) use ($search) {
+                    $searchQuery
+                        ->where('title', 'like', "%{$search}%")
+                        ->orWhere('subtitle', 'like', "%{$search}%")
+                        ->orWhere('author', 'like', "%{$search}%")
+                        ->orWhere('description', 'like', "%{$search}%");
+                });
+            }
+        )
+
+        /*
+        |--------------------------------------------------------------------------
+        | Category filter
+        |--------------------------------------------------------------------------
+        |
+        | Only active categories may be used in the public catalogue.
+        |
+        | Example:
+        | /api/books?category=new-creation-realities
+        |
+        */
+        ->when(
+            ! empty($validated['category']),
+            function ($query) use ($validated) {
+                $query->whereHas(
+                    'categories',
+                    function ($categoryQuery) use ($validated) {
                         $categoryQuery
-                            ->where('slug', $request->string('category')->toString())
+                            ->where('slug', $validated['category'])
                             ->where('is_active', true);
-                    });
-                }
-            )
+                    }
+                );
+            }
+        )
 
-            /*
-            |--------------------------------------------------------------------------
-            | Optional featured filter
-            |--------------------------------------------------------------------------
-            |
-            | Example:
-            | /api/books?featured=1
-            |
-            */
-            ->when(
-                $request->boolean('featured'),
-                fn ($query) => $query->where('is_featured', true)
-            )
+        /*
+        |--------------------------------------------------------------------------
+        | Featured filter
+        |--------------------------------------------------------------------------
+        |
+        | Example:
+        | /api/books?featured=1
+        |
+        */
+        ->when(
+            $request->boolean('featured'),
+            fn ($query) => $query->where('is_featured', true)
+        );
 
-            ->orderByDesc('published_at')
-            ->get();
+    /*
+    |--------------------------------------------------------------------------
+    | Sorting
+    |--------------------------------------------------------------------------
+    */
 
-        return response()->json([
-            'data' => $books,
-        ]);
-    }
+    $sort = $validated['sort'] ?? 'newest';
+
+    match ($sort) {
+        'oldest' => $books->orderBy('published_at'),
+        'title_asc' => $books->orderBy('title'),
+        'title_desc' => $books->orderByDesc('title'),
+        'price_asc' => $books->orderBy('price'),
+        'price_desc' => $books->orderByDesc('price'),
+        default => $books->orderByDesc('published_at'),
+    };
+
+    $books = $books->get();
+
+    return response()->json([
+        'data' => $books,
+    ]);
+}
 
     /**
      * Store a newly created book.
