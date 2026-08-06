@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\BookController;
 use App\Http\Controllers\Api\BookDownloadController;
 use App\Http\Controllers\Api\BookReaderController;
+use App\Http\Controllers\Api\CategoryController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -14,6 +15,9 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/books', [BookController::class, 'index']);
 Route::get('/books/{slug}', [BookController::class, 'show']);
+
+Route::get('/categories', [CategoryController::class, 'index']);
+Route::get('/categories/{category}', [CategoryController::class, 'show']);
 
 /*
 |--------------------------------------------------------------------------
@@ -32,6 +36,21 @@ Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
 
     Route::delete('/admin/books/{uuid}', [
         BookController::class,
+        'destroy'
+    ]);
+
+    Route::post('/admin/categories', [
+        CategoryController::class,
+        'store'
+    ]);
+
+    Route::put('/admin/categories/{category}', [
+        CategoryController::class,
+        'update'
+    ]);
+
+    Route::delete('/admin/categories/{category}', [
+        CategoryController::class,
         'destroy'
     ]);
 });
