@@ -96,7 +96,14 @@ class User extends Authenticatable
     {
     return $this->hasMany(Highlight::class);
     }
+        
+    /**
+ * Reading notes created by this user.
+ */
+    public function readingNotes(): HasMany 
+    {
+    return $this->hasMany(ReadingNote::class);
+    }
 
 
-    
 }

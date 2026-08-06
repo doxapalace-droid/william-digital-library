@@ -97,4 +97,15 @@ class Book extends Model
     return $this->hasMany(Highlight::class);
     }
 
+
+
+    /**
+ * Reading notes created for this book.
+ */
+    public function readingNotes(): HasMany
+    {
+    return $this->hasMany(ReadingNote::class);
+    }
+
+
 }

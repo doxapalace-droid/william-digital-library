@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\ReadingNoteController;
 use App\Http\Controllers\Api\BookController;
 use App\Http\Controllers\Api\BookDownloadController;
 use App\Http\Controllers\Api\BookReaderController;
@@ -255,4 +256,37 @@ Route::middleware('auth:sanctum')->group(function () {
         HighlightController::class,
         'destroy',
     ]);
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Reading Notes
+    |--------------------------------------------------------------------------
+    |
+    | Authenticated customers can create, view, update, and remove
+    | personal reading notes for books they are entitled to read.
+    |
+    */
+
+    Route::get('/books/{uuid}/notes', [
+        ReadingNoteController::class,
+        'index',
+    ]);
+
+    Route::post('/books/{uuid}/notes', [
+        ReadingNoteController::class,
+        'store',
+    ]);
+
+    Route::put('/books/{uuid}/notes/{readingNote}', [
+        ReadingNoteController::class,
+        'update',
+    ]);
+
+    Route::delete('/books/{uuid}/notes/{readingNote}', [
+        ReadingNoteController::class,
+        'destroy',
+    ]);
+
+    
 });
