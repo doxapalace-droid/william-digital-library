@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\BookController;
 use App\Http\Controllers\Api\BookDownloadController;
 use App\Http\Controllers\Api\BookReaderController;
 use App\Http\Controllers\Api\CategoryController;
+use App\Http\Controllers\Api\MyLibraryController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -11,47 +12,88 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 | Public Routes
 |--------------------------------------------------------------------------
+|
+| These routes are available without authentication.
+| Only published books and active categories should be exposed by
+| their respective controllers.
+|
 */
 
-Route::get('/books', [BookController::class, 'index']);
-Route::get('/books/{slug}', [BookController::class, 'show']);
+Route::get('/books', [
+    BookController::class,
+    'index',
+]);
 
-Route::get('/categories', [CategoryController::class, 'index']);
-Route::get('/categories/{category}', [CategoryController::class, 'show']);
+Route::get('/books/{slug}', [
+    BookController::class,
+    'show',
+]);
+
+Route::get('/categories', [
+    CategoryController::class,
+    'index',
+]);
+
+Route::get('/categories/{category}', [
+    CategoryController::class,
+    'show',
+]);
 
 /*
 |--------------------------------------------------------------------------
 | Admin Routes
 |--------------------------------------------------------------------------
+|
+| These routes require authentication and the admin role.
+| Administrators can manage books and categories.
+|
 */
 
-Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
+Route::middleware([
+    'auth:sanctum',
+    'role:admin',
+])->prefix('admin')->group(function () {
 
-    Route::post('/admin/books', [BookController::class, 'store']);
+    /*
+    |--------------------------------------------------------------------------
+    | Book Management
+    |--------------------------------------------------------------------------
+    */
 
-    Route::put('/admin/books/{uuid}', [
+    Route::post('/books', [
         BookController::class,
-        'update'
+        'store',
     ]);
 
-    Route::delete('/admin/books/{uuid}', [
+    Route::put('/books/{uuid}', [
         BookController::class,
-        'destroy'
+        'update',
     ]);
 
-    Route::post('/admin/categories', [
-        CategoryController::class,
-        'store'
+    Route::delete('/books/{uuid}', [
+        BookController::class,
+        'destroy',
     ]);
 
-    Route::put('/admin/categories/{category}', [
+    /*
+    |--------------------------------------------------------------------------
+    | Category Management
+    |--------------------------------------------------------------------------
+    */
+
+    Route::post('/categories', [
         CategoryController::class,
-        'update'
+        'store',
     ]);
 
-    Route::delete('/admin/categories/{category}', [
+    Route::put('/categories/{category}', [
         CategoryController::class,
-        'destroy'
+        'update',
+    ]);
+
+    Route::delete('/categories/{category}', [
+        CategoryController::class,
+        'destroy',
     ]);
 });
 
@@ -59,30 +101,63 @@ Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
 |--------------------------------------------------------------------------
 | Authenticated User / Customer Routes
 |--------------------------------------------------------------------------
+|
+| These routes require a valid authenticated user.
+|
 */
 
 Route::middleware('auth:sanctum')->group(function () {
 
     /*
-    | Authenticated user profile
+    |--------------------------------------------------------------------------
+    | Authenticated User Profile
+    |--------------------------------------------------------------------------
     */
+
     Route::get('/user', function (Request $request) {
         return $request->user();
     });
 
     /*
-    | Read purchased/entitled book
+    |--------------------------------------------------------------------------
+    | My Library
+    |--------------------------------------------------------------------------
+    |
+    | Returns only books the authenticated user is currently entitled
+    | to access.
+    |
     */
-    Route::get('/books/{book}/read', [
-        BookReaderController::class,
-        'show'
+
+    Route::get('/my-library', [
+        MyLibraryController::class,
+        'index',
     ]);
 
     /*
-    | Download purchased/entitled book
+    |--------------------------------------------------------------------------
+    | Secure Book Reading
+    |--------------------------------------------------------------------------
+    |
+    | Access must be verified by the BookReaderController.
+    |
     */
+
+    Route::get('/books/{book}/read', [
+        BookReaderController::class,
+        'show',
+    ]);
+
+    /*
+    |--------------------------------------------------------------------------
+    | Secure Book Download
+    |--------------------------------------------------------------------------
+    |
+    | Access must be verified by the BookDownloadController.
+    |
+    */
+
     Route::get('/books/{book}/download', [
         BookDownloadController::class,
-        'download'
+        'download',
     ]);
 });
