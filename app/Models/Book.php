@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+
 class Book extends Model
 {
     use HasFactory,HasUuid, SoftDeletes;
@@ -86,7 +87,7 @@ class Book extends Model
  */
     public function bookmarks(): HasMany
     {
-    return $this->hasMany(Bookmark::class);
+        return $this->hasMany(Bookmark::class);
     }
    
         /**
@@ -94,7 +95,7 @@ class Book extends Model
  */
     public function highlights(): HasMany
     {
-    return $this->hasMany(Highlight::class);
+        return $this->hasMany(Highlight::class);
     }
 
 
@@ -104,7 +105,16 @@ class Book extends Model
  */
     public function readingNotes(): HasMany
     {
-    return $this->hasMany(ReadingNote::class);
+     return $this->hasMany(ReadingNote::class);
+    }
+
+
+    /**
+    * Users' favorite records for this book.
+    */
+    public function favorites(): HasMany
+    {
+        return $this->hasMany(Favorite::class);
     }
 
 

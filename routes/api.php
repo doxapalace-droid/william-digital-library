@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\BookReaderController;
 use App\Http\Controllers\Api\BookmarkController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\ContinueReadingController;
+use App\Http\Controllers\Api\FavoriteController;
 use App\Http\Controllers\Api\HighlightController;
 use App\Http\Controllers\Api\MyLibraryController;
 use App\Http\Controllers\Api\ReaderPreferenceController;
@@ -13,6 +14,7 @@ use App\Http\Controllers\Api\ReadingNoteController;
 use App\Http\Controllers\Api\ReadingProgressController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+
 
 /*
 |--------------------------------------------------------------------------
@@ -44,6 +46,7 @@ Route::get('/categories/{category}', [
     CategoryController::class,
     'show',
 ]);
+
 
 /*
 |--------------------------------------------------------------------------
@@ -81,6 +84,7 @@ Route::middleware([
         'destroy',
     ]);
 
+
     /*
     |--------------------------------------------------------------------------
     | Category Management
@@ -103,12 +107,15 @@ Route::middleware([
     ]);
 });
 
+
 /*
 |--------------------------------------------------------------------------
 | Authenticated User / Customer Routes
 |--------------------------------------------------------------------------
 |
-| These routes require a valid authenticated user.
+| Every route in this group requires a valid Sanctum-authenticated user.
+| Individual controllers remain responsible for verifying ownership,
+| entitlement, and access to book-specific resources.
 |
 */
 
@@ -123,6 +130,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', function (Request $request) {
         return $request->user();
     });
+
 
     /*
     |--------------------------------------------------------------------------
@@ -139,6 +147,7 @@ Route::middleware('auth:sanctum')->group(function () {
         'index',
     ]);
 
+
     /*
     |--------------------------------------------------------------------------
     | Continue Reading
@@ -154,13 +163,15 @@ Route::middleware('auth:sanctum')->group(function () {
         'index',
     ]);
 
+
     /*
     |--------------------------------------------------------------------------
     | Reader Preferences
     |--------------------------------------------------------------------------
     |
-    | Authenticated users can retrieve and update their personal reading
-    | preferences. These settings belong only to the authenticated user.
+    | Authenticated users can retrieve and update their personal reader
+    | appearance and layout preferences. Each preference record belongs
+    | exclusively to the authenticated user.
     |
     */
 
@@ -174,12 +185,15 @@ Route::middleware('auth:sanctum')->group(function () {
         'update',
     ]);
 
+
     /*
     |--------------------------------------------------------------------------
     | Secure Book Reading
     |--------------------------------------------------------------------------
     |
-    | Access must be verified by the BookReaderController.
+    | Allows an authenticated customer to securely read a book.
+    | BookReaderController must verify that the authenticated customer
+    | currently has a valid entitlement to the requested book.
     |
     */
 
@@ -188,12 +202,15 @@ Route::middleware('auth:sanctum')->group(function () {
         'show',
     ]);
 
+
     /*
     |--------------------------------------------------------------------------
     | Secure Book Download
     |--------------------------------------------------------------------------
     |
-    | Access must be verified by the BookDownloadController.
+    | Allows an authenticated customer to download an entitled book.
+    | BookDownloadController must verify book access before returning
+    | or streaming the protected file.
     |
     */
 
@@ -202,13 +219,14 @@ Route::middleware('auth:sanctum')->group(function () {
         'download',
     ]);
 
+
     /*
     |--------------------------------------------------------------------------
     | Reading Progress
     |--------------------------------------------------------------------------
     |
-    | Customers may retrieve and update their reading position only while
-    | authenticated. The controller additionally verifies that the customer
+    | Customers may retrieve and update their reading position.
+    | ReadingProgressController additionally verifies that the customer
     | has a valid entitlement to the requested book.
     |
     */
@@ -222,6 +240,47 @@ Route::middleware('auth:sanctum')->group(function () {
         ReadingProgressController::class,
         'update',
     ]);
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Favorites
+    |--------------------------------------------------------------------------
+    |
+    | Favorites allow customers to mark entitled books for quick access.
+    |
+    | GET:
+    | Determines whether the requested book is currently favorited by
+    | the authenticated customer.
+    |
+    | POST:
+    | Adds the requested book to the authenticated customer's favorites.
+    | The controller prevents duplicate favorite records.
+    |
+    | DELETE:
+    | Removes the requested book from the authenticated customer's
+    | favorites.
+    |
+    | FavoriteController must verify that the authenticated customer
+    | currently has access to the requested book.
+    |
+    */
+
+    Route::get('/books/{uuid}/favorites', [
+        FavoriteController::class,
+        'show',
+    ]);
+
+    Route::post('/books/{uuid}/favorites', [
+        FavoriteController::class,
+        'store',
+    ]);
+
+    Route::delete('/books/{uuid}/favorites', [
+        FavoriteController::class,
+        'destroy',
+    ]);
+
 
     /*
     |--------------------------------------------------------------------------
@@ -247,6 +306,7 @@ Route::middleware('auth:sanctum')->group(function () {
         BookmarkController::class,
         'destroy',
     ]);
+
 
     /*
     |--------------------------------------------------------------------------
@@ -277,6 +337,7 @@ Route::middleware('auth:sanctum')->group(function () {
         HighlightController::class,
         'destroy',
     ]);
+
 
     /*
     |--------------------------------------------------------------------------

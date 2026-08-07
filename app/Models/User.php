@@ -15,7 +15,6 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
-
 #[Fillable(['name', 'email', 'password', 'role_id'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
@@ -112,6 +111,15 @@ class User extends Authenticatable
     public function readerPreference(): HasOne
     {
     return $this->hasOne(ReaderPreference::class);
+    }
+
+
+    /**
+ * Books favorited by this user.
+ */
+    public function favorites(): HasMany
+    {
+    return $this->hasMany(Favorite::class);
     }
 
 }
