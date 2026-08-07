@@ -1,6 +1,5 @@
 <?php
 
-use App\Http\Controllers\Api\ReadingNoteController;
 use App\Http\Controllers\Api\BookController;
 use App\Http\Controllers\Api\BookDownloadController;
 use App\Http\Controllers\Api\BookReaderController;
@@ -9,6 +8,8 @@ use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\ContinueReadingController;
 use App\Http\Controllers\Api\HighlightController;
 use App\Http\Controllers\Api\MyLibraryController;
+use App\Http\Controllers\Api\ReaderPreferenceController;
+use App\Http\Controllers\Api\ReadingNoteController;
 use App\Http\Controllers\Api\ReadingProgressController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -155,6 +156,26 @@ Route::middleware('auth:sanctum')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
+    | Reader Preferences
+    |--------------------------------------------------------------------------
+    |
+    | Authenticated users can retrieve and update their personal reading
+    | preferences. These settings belong only to the authenticated user.
+    |
+    */
+
+    Route::get('/reader-preferences', [
+        ReaderPreferenceController::class,
+        'show',
+    ]);
+
+    Route::put('/reader-preferences', [
+        ReaderPreferenceController::class,
+        'update',
+    ]);
+
+    /*
+    |--------------------------------------------------------------------------
     | Secure Book Reading
     |--------------------------------------------------------------------------
     |
@@ -257,7 +278,6 @@ Route::middleware('auth:sanctum')->group(function () {
         'destroy',
     ]);
 
-
     /*
     |--------------------------------------------------------------------------
     | Reading Notes
@@ -287,6 +307,4 @@ Route::middleware('auth:sanctum')->group(function () {
         ReadingNoteController::class,
         'destroy',
     ]);
-
-    
 });

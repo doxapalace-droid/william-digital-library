@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
-
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 
 #[Fillable(['name', 'email', 'password', 'role_id'])]
@@ -105,5 +105,13 @@ class User extends Authenticatable
     return $this->hasMany(ReadingNote::class);
     }
 
+
+    /**
+ * The reader preferences belonging to this user.
+ */
+    public function readerPreference(): HasOne
+    {
+    return $this->hasOne(ReaderPreference::class);
+    }
 
 }
