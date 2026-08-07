@@ -3,13 +3,17 @@
 namespace App\Models;
 
 use App\Traits\HasUuid;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Category extends Model
 {
-    use HasUuid;
+    use HasFactory, HasUuid;
 
+    /**
+     * Attributes that may be mass assigned.
+     */
     protected $fillable = [
         'name',
         'slug',
@@ -18,6 +22,9 @@ class Category extends Model
         'is_active',
     ];
 
+    /**
+     * Attribute casting.
+     */
     protected function casts(): array
     {
         return [

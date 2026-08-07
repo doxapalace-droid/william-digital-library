@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Book;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -15,136 +16,310 @@ class BookController extends Controller
     /**
      * Display a listing of published books.
      */
-   public function index(Request $request)
-{
-    /*
-    |--------------------------------------------------------------------------
-    | Validate catalogue filters
-    |--------------------------------------------------------------------------
-    */
+    public function index(Request $request): JsonResponse
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | Validate catalogue filters
+        |--------------------------------------------------------------------------
+        */
 
-    $validated = $request->validate([
-        'search' => ['nullable', 'string', 'max:255'],
-        'category' => ['nullable', 'string', 'max:255'],
-        'featured' => ['nullable', 'boolean'],
-        'sort' => [
-            'nullable',
-            Rule::in([
-                'newest',
-                'oldest',
-                'title_asc',
-                'title_desc',
-                'price_asc',
-                'price_desc',
-            ]),
-        ],
-    ]);
+        $validated = $request->validate([
+            'search' => [
+                'nullable',
+                'string',
+                'max:255',
+            ],
 
-    $books = Book::query()
-        ->with([
-            'categories:id,uuid,name,slug',
-        ])
-        ->where('is_published', true)
+            'category' => [
+                'nullable',
+                'string',
+                'max:255',
+            ],
+
+            'featured' => [
+                'nullable',
+                'boolean',
+            ],
+
+            'sort' => [
+                'nullable',
+                Rule::in([
+                    'newest',
+                    'oldest',
+                    'title_asc',
+                    'title_desc',
+                    'price_asc',
+                    'price_desc',
+                ]),
+            ],
+        ]);
 
         /*
         |--------------------------------------------------------------------------
-        | Search
+        | Build public catalogue query
         |--------------------------------------------------------------------------
-        |
-        | Searches title, subtitle, author and description.
-        |
-        | Example:
-        | /api/books?search=dominion
-        |
         */
-        ->when(
-            ! empty($validated['search']),
-            function ($query) use ($validated) {
-                $search = $validated['search'];
 
-                $query->where(function ($searchQuery) use ($search) {
-                    $searchQuery
-                        ->where('title', 'like', "%{$search}%")
-                        ->orWhere('subtitle', 'like', "%{$search}%")
-                        ->orWhere('author', 'like', "%{$search}%")
-                        ->orWhere('description', 'like', "%{$search}%");
-                });
-            }
-        )
+        $books = Book::query()
+            ->with([
+                'categories:id,uuid,name,slug',
+            ])
+            ->where('is_published', true)
+
+            /*
+            |--------------------------------------------------------------------------
+            | Search
+            |--------------------------------------------------------------------------
+            |
+            | Searches title, subtitle, author and description.
+            |
+            | Example:
+            | /api/books?search=dominion
+            |
+            */
+
+            ->when(
+                ! empty($validated['search']),
+                function ($query) use ($validated) {
+                    $search = $validated['search'];
+
+                    $query->where(function ($searchQuery) use ($search) {
+                        $searchQuery
+                            ->where('title', 'like', "%{$search}%")
+                            ->orWhere('subtitle', 'like', "%{$search}%")
+                            ->orWhere('author', 'like', "%{$search}%")
+                            ->orWhere('description', 'like', "%{$search}%");
+                    });
+                }
+            )
+
+            /*
+            |--------------------------------------------------------------------------
+            | Category filter
+            |--------------------------------------------------------------------------
+            |
+            | The main catalogue uses the category slug.
+            |
+            | Example:
+            | /api/books?category=leadership
+            |
+            */
+
+            ->when(
+                ! empty($validated['category']),
+                function ($query) use ($validated) {
+                    $query->whereHas(
+                        'categories',
+                        function ($categoryQuery) use ($validated) {
+                            $categoryQuery
+                                ->where('slug', $validated['category'])
+                                ->where('is_active', true);
+                        }
+                    );
+                }
+            )
+
+            /*
+            |--------------------------------------------------------------------------
+            | Featured filter
+            |--------------------------------------------------------------------------
+            |
+            | Example:
+            | /api/books?featured=1
+            |
+            */
+
+            ->when(
+                $request->boolean('featured'),
+                fn ($query) => $query->where('is_featured', true)
+            );
 
         /*
         |--------------------------------------------------------------------------
-        | Category filter
+        | Sorting
+        |--------------------------------------------------------------------------
+        */
+
+        $sort = $validated['sort'] ?? 'newest';
+
+        match ($sort) {
+            'oldest' => $books->orderBy('published_at'),
+            'title_asc' => $books->orderBy('title'),
+            'title_desc' => $books->orderByDesc('title'),
+            'price_asc' => $books->orderBy('price'),
+            'price_desc' => $books->orderByDesc('price'),
+            default => $books->orderByDesc('published_at'),
+        };
+
+        $books = $books->get();
+
+        return response()->json([
+            'data' => $books,
+        ]);
+    }
+
+    /**
+     * Search published books.
+     *
+     * Supported query parameters:
+     *
+     * q
+     *     Search by title or author.
+     *
+     * category
+     *     Filter by category database ID.
+     *
+     * Examples:
+     *
+     * /api/books/search?q=dominion
+     * /api/books/search?q=William
+     * /api/books/search?category=1
+     * /api/books/search?q=dominion&category=1
+     */
+    public function search(Request $request): JsonResponse
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | Validate search parameters
         |--------------------------------------------------------------------------
         |
-        | Only active categories may be used in the public catalogue.
-        |
-        | Example:
-        | /api/books?category=new-creation-realities
+        | q is optional because category-only searches are supported.
+        | When q is supplied, it must contain at least two characters.
         |
         */
-        ->when(
-            ! empty($validated['category']),
-            function ($query) use ($validated) {
-                $query->whereHas(
-                    'categories',
-                    function ($categoryQuery) use ($validated) {
-                        $categoryQuery
-                            ->where('slug', $validated['category'])
-                            ->where('is_active', true);
-                    }
-                );
-            }
-        )
+
+        $validated = $request->validate([
+            'q' => [
+                'nullable',
+                'string',
+                'min:2',
+                'max:100',
+            ],
+
+            'category' => [
+                'nullable',
+                'integer',
+                Rule::exists('categories', 'id')->where(
+                    fn ($query) => $query->where('is_active', true)
+                ),
+            ],
+        ]);
+
+        $search = isset($validated['q'])
+            ? trim($validated['q'])
+            : null;
+
+        $categoryId = $validated['category'] ?? null;
 
         /*
         |--------------------------------------------------------------------------
-        | Featured filter
+        | Build search query
         |--------------------------------------------------------------------------
         |
-        | Example:
-        | /api/books?featured=1
+        | Public search must never expose unpublished books.
         |
         */
-        ->when(
-            $request->boolean('featured'),
-            fn ($query) => $query->where('is_featured', true)
-        );
 
-    /*
-    |--------------------------------------------------------------------------
-    | Sorting
-    |--------------------------------------------------------------------------
-    */
+        $books = Book::query()
+            ->with([
+                'categories:id,uuid,name,slug',
+            ])
+            ->where('is_published', true)
 
-    $sort = $validated['sort'] ?? 'newest';
+            /*
+            |--------------------------------------------------------------------------
+            | Search title and author
+            |--------------------------------------------------------------------------
+            */
 
-    match ($sort) {
-        'oldest' => $books->orderBy('published_at'),
-        'title_asc' => $books->orderBy('title'),
-        'title_desc' => $books->orderByDesc('title'),
-        'price_asc' => $books->orderBy('price'),
-        'price_desc' => $books->orderByDesc('price'),
-        default => $books->orderByDesc('published_at'),
-    };
+            ->when(
+                $search !== null && $search !== '',
+                function ($query) use ($search) {
+                    $normalizedSearch = mb_strtolower($search);
 
-    $books = $books->get();
+                    $query->where(
+                        function ($searchQuery) use ($normalizedSearch) {
+                            $searchQuery
+                                ->whereRaw(
+                                    'LOWER(title) LIKE ?',
+                                    ['%' . $normalizedSearch . '%']
+                                )
+                                ->orWhereRaw(
+                                    'LOWER(author) LIKE ?',
+                                    ['%' . $normalizedSearch . '%']
+                                );
+                        }
+                    );
+                }
+            )
 
-    return response()->json([
-        'data' => $books,
-    ]);
-}
+            /*
+            |--------------------------------------------------------------------------
+            | Category filter
+            |--------------------------------------------------------------------------
+            |
+            | The dedicated search endpoint uses category database IDs.
+            |
+            */
+
+            ->when(
+                $categoryId !== null,
+                function ($query) use ($categoryId) {
+                    $query->whereHas(
+                        'categories',
+                        function ($categoryQuery) use ($categoryId) {
+                            $categoryQuery->where(
+                                'categories.id',
+                                $categoryId
+                            );
+                        }
+                    );
+                }
+            )
+
+            /*
+            |--------------------------------------------------------------------------
+            | Stable ordering
+            |--------------------------------------------------------------------------
+            */
+
+            ->orderBy('title')
+            ->get();
+
+        return response()->json([
+            'data' => $books,
+        ]);
+    }
 
     /**
      * Store a newly created book.
      */
-    public function store(Request $request)
+    public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'title' => ['required', 'string', 'max:255'],
-            'subtitle' => ['nullable', 'string', 'max:255'],
-            'description' => ['nullable', 'string'],
-            'author' => ['nullable', 'string', 'max:255'],
+            'title' => [
+                'required',
+                'string',
+                'max:255',
+            ],
+
+            'subtitle' => [
+                'nullable',
+                'string',
+                'max:255',
+            ],
+
+            'description' => [
+                'nullable',
+                'string',
+            ],
+
+            'author' => [
+                'nullable',
+                'string',
+                'max:255',
+            ],
 
             'isbn' => [
                 'nullable',
@@ -153,8 +328,17 @@ class BookController extends Controller
                 Rule::unique('books', 'isbn'),
             ],
 
-            'price' => ['required', 'numeric', 'min:0'],
-            'currency' => ['required', 'string', 'size:3'],
+            'price' => [
+                'required',
+                'numeric',
+                'min:0',
+            ],
+
+            'currency' => [
+                'required',
+                'string',
+                'size:3',
+            ],
 
             'cover_image' => [
                 'nullable',
@@ -174,12 +358,15 @@ class BookController extends Controller
             | Categories
             |--------------------------------------------------------------------------
             |
-            | Send category database IDs:
+            | Category database IDs are expected.
+            |
+            | Example:
             |
             | categories[] = 1
             | categories[] = 8
             |
             */
+
             'categories' => [
                 'sometimes',
                 'array',
@@ -193,8 +380,15 @@ class BookController extends Controller
                 ),
             ],
 
-            'is_featured' => ['sometimes', 'boolean'],
-            'is_published' => ['sometimes', 'boolean'],
+            'is_featured' => [
+                'sometimes',
+                'boolean',
+            ],
+
+            'is_published' => [
+                'sometimes',
+                'boolean',
+            ],
         ]);
 
         /*
@@ -259,7 +453,6 @@ class BookController extends Controller
         */
 
         try {
-
             $book = DB::transaction(function () use (
                 $validated,
                 $categoryIds
@@ -272,9 +465,7 @@ class BookController extends Controller
 
                 return $book;
             });
-
         } catch (\Throwable $exception) {
-
             /*
             |--------------------------------------------------------------------------
             | Remove PDF if database operation fails
@@ -288,6 +479,7 @@ class BookController extends Controller
 
         return response()->json([
             'message' => 'Book created successfully.',
+
             'data' => $book->load(
                 'categories:id,uuid,name,slug'
             ),
@@ -297,7 +489,7 @@ class BookController extends Controller
     /**
      * Display a published book.
      */
-    public function show(string $slug)
+    public function show(string $slug): JsonResponse
     {
         $book = Book::query()
             ->with([
@@ -315,9 +507,12 @@ class BookController extends Controller
     /**
      * Update the specified book.
      */
-    public function update(Request $request, string $uuid)
-    {
-        $book = Book::where('uuid', $uuid)->firstOrFail();
+    public function update(
+        Request $request,
+        string $uuid
+    ): JsonResponse {
+        $book = Book::where('uuid', $uuid)
+            ->firstOrFail();
 
         $validated = $request->validate([
             'title' => [
@@ -349,7 +544,8 @@ class BookController extends Controller
                 'nullable',
                 'string',
                 'max:255',
-                Rule::unique('books', 'isbn')->ignore($book->id),
+                Rule::unique('books', 'isbn')
+                    ->ignore($book->id),
             ],
 
             'price' => [
@@ -441,7 +637,6 @@ class BookController extends Controller
         */
 
         if (array_key_exists('is_published', $validated)) {
-
             if (
                 $validated['is_published'] &&
                 ! $book->published_at
@@ -464,7 +659,6 @@ class BookController extends Controller
         $newPdfPath = null;
 
         if ($request->hasFile('pdf')) {
-
             $newPdfPath = Str::uuid() . '.pdf';
 
             $request->file('pdf')->storeAs(
@@ -492,7 +686,6 @@ class BookController extends Controller
         */
 
         try {
-
             DB::transaction(function () use (
                 $book,
                 $validated,
@@ -505,22 +698,18 @@ class BookController extends Controller
                 | Only synchronize categories when the request actually
                 | contains the categories field.
                 |
-                | Therefore:
-                |
                 | no categories field = leave existing categories alone
-                | categories: []     = remove all categories
+                | categories: []      = remove all categories
                 */
 
                 if ($categoriesWereProvided) {
                     $book->categories()->sync($categoryIds);
                 }
             });
-
         } catch (\Throwable $exception) {
-
             /*
             |--------------------------------------------------------------------------
-            | Database update failed
+            | Remove newly uploaded PDF if database update fails
             |--------------------------------------------------------------------------
             */
 
@@ -548,6 +737,7 @@ class BookController extends Controller
 
         return response()->json([
             'message' => 'Book updated successfully.',
+
             'data' => $book
                 ->fresh()
                 ->load('categories:id,uuid,name,slug'),
@@ -557,9 +747,10 @@ class BookController extends Controller
     /**
      * Soft delete the specified book.
      */
-    public function destroy(string $uuid)
+    public function destroy(string $uuid): JsonResponse
     {
-        $book = Book::where('uuid', $uuid)->firstOrFail();
+        $book = Book::where('uuid', $uuid)
+            ->firstOrFail();
 
         /*
         |--------------------------------------------------------------------------
@@ -573,7 +764,10 @@ class BookController extends Controller
 
         $book->delete();
 
-        return response()->noContent();
+        return response()->json(
+            null,
+            204
+        );
     }
 
     /**
@@ -586,8 +780,11 @@ class BookController extends Controller
         $baseSlug = Str::slug($title);
 
         /*
-        | Fallback for unusual titles that produce an empty slug.
+        |--------------------------------------------------------------------------
+        | Fallback for unusual titles
+        |--------------------------------------------------------------------------
         */
+
         if ($baseSlug === '') {
             $baseSlug = 'book';
         }
@@ -609,6 +806,7 @@ class BookController extends Controller
                 ->exists()
         ) {
             $slug = $baseSlug . '-' . $counter;
+
             $counter++;
         }
 

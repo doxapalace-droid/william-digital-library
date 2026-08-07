@@ -27,20 +27,88 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
+
+/*
+|--------------------------------------------------------------------------
+| Public Book Catalogue
+|--------------------------------------------------------------------------
+|
+| Returns the public catalogue of published books.
+|
+*/
+
 Route::get('/books', [
     BookController::class,
     'index',
 ]);
+
+
+/*
+|--------------------------------------------------------------------------
+| Book Search
+|--------------------------------------------------------------------------
+|
+| Allows visitors to search and filter the public book catalogue.
+|
+| Supported functionality:
+|
+| - Search published books by title.
+| - Search published books by author.
+| - Case-insensitive searching.
+| - Filter published books by category.
+| - Combine a text search with a category filter.
+| - Return an empty collection when nothing matches.
+|
+| Only published books should be returned by the controller.
+|
+| Examples:
+|
+| GET /api/books/search?q=Binding
+| GET /api/books/search?q=William
+| GET /api/books/search?category=1
+| GET /api/books/search?q=Dominion&category=1
+|
+| IMPORTANT:
+| This route must remain BEFORE /books/{slug}.
+| Otherwise Laravel may interpret "search" as a book slug.
+|
+*/
+
+Route::get('/books/search', [
+    BookController::class,
+    'search',
+]);
+
+
+/*
+|--------------------------------------------------------------------------
+| Public Book Details
+|--------------------------------------------------------------------------
+|
+| Returns a single published book using its public slug.
+|
+*/
 
 Route::get('/books/{slug}', [
     BookController::class,
     'show',
 ]);
 
+
+/*
+|--------------------------------------------------------------------------
+| Public Categories
+|--------------------------------------------------------------------------
+|
+| Returns active public categories and their public details.
+|
+*/
+
 Route::get('/categories', [
     CategoryController::class,
     'index',
 ]);
+
 
 Route::get('/categories/{category}', [
     CategoryController::class,
@@ -63,10 +131,14 @@ Route::middleware([
     'role:admin',
 ])->prefix('admin')->group(function () {
 
+
     /*
     |--------------------------------------------------------------------------
     | Book Management
     |--------------------------------------------------------------------------
+    |
+    | Administrators can create, update, and delete books.
+    |
     */
 
     Route::post('/books', [
@@ -74,10 +146,12 @@ Route::middleware([
         'store',
     ]);
 
+
     Route::put('/books/{uuid}', [
         BookController::class,
         'update',
     ]);
+
 
     Route::delete('/books/{uuid}', [
         BookController::class,
@@ -89,6 +163,9 @@ Route::middleware([
     |--------------------------------------------------------------------------
     | Category Management
     |--------------------------------------------------------------------------
+    |
+    | Administrators can create, update, and delete categories.
+    |
     */
 
     Route::post('/categories', [
@@ -96,10 +173,12 @@ Route::middleware([
         'store',
     ]);
 
+
     Route::put('/categories/{category}', [
         CategoryController::class,
         'update',
     ]);
+
 
     Route::delete('/categories/{category}', [
         CategoryController::class,
@@ -121,10 +200,14 @@ Route::middleware([
 
 Route::middleware('auth:sanctum')->group(function () {
 
+
     /*
     |--------------------------------------------------------------------------
     | Authenticated User Profile
     |--------------------------------------------------------------------------
+    |
+    | Returns the currently authenticated customer.
+    |
     */
 
     Route::get('/user', function (Request $request) {
@@ -170,8 +253,9 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     |
     | Authenticated users can retrieve and update their personal reader
-    | appearance and layout preferences. Each preference record belongs
-    | exclusively to the authenticated user.
+    | appearance and layout preferences.
+    |
+    | Each preference record belongs exclusively to the authenticated user.
     |
     */
 
@@ -179,6 +263,7 @@ Route::middleware('auth:sanctum')->group(function () {
         ReaderPreferenceController::class,
         'show',
     ]);
+
 
     Route::put('/reader-preferences', [
         ReaderPreferenceController::class,
@@ -192,6 +277,7 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     |
     | Allows an authenticated customer to securely read a book.
+    |
     | BookReaderController must verify that the authenticated customer
     | currently has a valid entitlement to the requested book.
     |
@@ -209,6 +295,7 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     |
     | Allows an authenticated customer to download an entitled book.
+    |
     | BookDownloadController must verify book access before returning
     | or streaming the protected file.
     |
@@ -226,6 +313,7 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     |
     | Customers may retrieve and update their reading position.
+    |
     | ReadingProgressController additionally verifies that the customer
     | has a valid entitlement to the requested book.
     |
@@ -235,6 +323,7 @@ Route::middleware('auth:sanctum')->group(function () {
         ReadingProgressController::class,
         'show',
     ]);
+
 
     Route::put('/books/{uuid}/progress', [
         ReadingProgressController::class,
@@ -255,7 +344,7 @@ Route::middleware('auth:sanctum')->group(function () {
     |
     | POST:
     | Adds the requested book to the authenticated customer's favorites.
-    | The controller prevents duplicate favorite records.
+    | The controller should prevent duplicate favorite records.
     |
     | DELETE:
     | Removes the requested book from the authenticated customer's
@@ -271,10 +360,12 @@ Route::middleware('auth:sanctum')->group(function () {
         'show',
     ]);
 
+
     Route::post('/books/{uuid}/favorites', [
         FavoriteController::class,
         'store',
     ]);
+
 
     Route::delete('/books/{uuid}/favorites', [
         FavoriteController::class,
@@ -290,6 +381,9 @@ Route::middleware('auth:sanctum')->group(function () {
     | Authenticated customers can create, view, and remove bookmarks
     | for books they are currently entitled to read.
     |
+    | BookmarkController must verify both entitlement and ownership
+    | before modifying a bookmark.
+    |
     */
 
     Route::get('/books/{uuid}/bookmarks', [
@@ -297,10 +391,12 @@ Route::middleware('auth:sanctum')->group(function () {
         'index',
     ]);
 
+
     Route::post('/books/{uuid}/bookmarks', [
         BookmarkController::class,
         'store',
     ]);
+
 
     Route::delete('/books/{uuid}/bookmarks/{bookmark}', [
         BookmarkController::class,
@@ -316,6 +412,9 @@ Route::middleware('auth:sanctum')->group(function () {
     | Authenticated customers can create, view, update, and remove
     | highlights for books they are currently entitled to read.
     |
+    | HighlightController must ensure that users cannot access or modify
+    | another customer's highlights.
+    |
     */
 
     Route::get('/books/{uuid}/highlights', [
@@ -323,15 +422,18 @@ Route::middleware('auth:sanctum')->group(function () {
         'index',
     ]);
 
+
     Route::post('/books/{uuid}/highlights', [
         HighlightController::class,
         'store',
     ]);
 
+
     Route::put('/books/{uuid}/highlights/{highlight}', [
         HighlightController::class,
         'update',
     ]);
+
 
     Route::delete('/books/{uuid}/highlights/{highlight}', [
         HighlightController::class,
@@ -347,6 +449,9 @@ Route::middleware('auth:sanctum')->group(function () {
     | Authenticated customers can create, view, update, and remove
     | personal reading notes for books they are entitled to read.
     |
+    | ReadingNoteController must ensure that notes remain private to
+    | the authenticated customer.
+    |
     */
 
     Route::get('/books/{uuid}/notes', [
@@ -354,15 +459,18 @@ Route::middleware('auth:sanctum')->group(function () {
         'index',
     ]);
 
+
     Route::post('/books/{uuid}/notes', [
         ReadingNoteController::class,
         'store',
     ]);
 
+
     Route::put('/books/{uuid}/notes/{readingNote}', [
         ReadingNoteController::class,
         'update',
     ]);
+
 
     Route::delete('/books/{uuid}/notes/{readingNote}', [
         ReadingNoteController::class,
