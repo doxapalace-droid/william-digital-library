@@ -15,6 +15,8 @@ return new class extends Migration
 
             $table->id();
 
+            $table->uuid('uuid')->unique();
+
             $table->foreignId('user_id')
                 ->constrained()
                 ->cascadeOnDelete();
@@ -23,7 +25,8 @@ return new class extends Migration
                 ->constrained()
                 ->cascadeOnDelete();
 
-            $table->timestamp('last_viewed_at');
+            $table->timestamp('last_viewed_at')
+                ->useCurrent();
 
             $table->timestamps();
 

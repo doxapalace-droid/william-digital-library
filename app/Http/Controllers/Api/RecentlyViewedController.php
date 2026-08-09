@@ -15,9 +15,13 @@ class RecentlyViewedController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        $user = $request->user();
+
+        abort_unless($user, 401);
+
         $recentlyViewed = RecentlyViewed::query()
             ->with('book')
-            ->where('user_id', $request->user()->id)
+            ->where('user_id', $user->id)
             ->orderByDesc('last_viewed_at')
             ->get();
 
@@ -31,23 +35,16 @@ class RecentlyViewedController extends Controller
      */
     public function store(Request $request, string $uuid): JsonResponse
     {
+        $user = $request->user();
+
+        abort_unless($user, 401);
+
         $book = Book::query()
             ->where('uuid', $uuid)
             ->firstOrFail();
 
-        /*
-        |--------------------------------------------------------------------------
-        | Verify entitlement
-        |--------------------------------------------------------------------------
-        |
-        | Only customers who own the book should be able to add it to
-        | their Recently Viewed list.
-        |
-        */
-
         abort_unless(
-            $request->user()
-                ->bookEntitlements()
+            $user->bookEntitlements()
                 ->where('book_id', $book->id)
                 ->exists(),
             403
@@ -55,7 +52,7 @@ class RecentlyViewedController extends Controller
 
         RecentlyViewed::updateOrCreate(
             [
-                'user_id' => $request->user()->id,
+                'user_id' => $user->id,
                 'book_id' => $book->id,
             ],
             [
