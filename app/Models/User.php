@@ -14,6 +14,8 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use App\Models\RecentlyViewed;
+
 
 #[Fillable(['name', 'email', 'password', 'role_id'])]
 #[Hidden(['password', 'remember_token'])]
@@ -120,6 +122,14 @@ class User extends Authenticatable
     public function favorites(): HasMany
     {
     return $this->hasMany(Favorite::class);
+    }
+
+    /**
+ * Recently viewed books by this user.
+ */
+    public function recentlyViewed(): HasMany
+    {
+        return $this->hasMany(RecentlyViewed::class);
     }
 
 }

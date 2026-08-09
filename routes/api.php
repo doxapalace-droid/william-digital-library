@@ -1,5 +1,8 @@
 <?php
 
+
+
+use App\Http\Controllers\Api\RecentlyViewedController;
 use App\Http\Controllers\Api\BookController;
 use App\Http\Controllers\Api\BookDownloadController;
 use App\Http\Controllers\Api\BookReaderController;
@@ -476,4 +479,25 @@ Route::middleware('auth:sanctum')->group(function () {
         ReadingNoteController::class,
         'destroy',
     ]);
-});
+
+
+
+
+    });/*
+    |--------------------------------------------------------------------------
+    | Recently Viewed
+    |--------------------------------------------------------------------------
+    |
+    | Keeps track of books recently opened by the authenticated customer.
+    |
+    */
+
+    Route::get('/recently-viewed', [
+    RecentlyViewedController::class,
+    'index',
+    ]);
+
+    Route::post('/books/{uuid}/recently-viewed', [
+    RecentlyViewedController::class,
+    'store',
+]);
