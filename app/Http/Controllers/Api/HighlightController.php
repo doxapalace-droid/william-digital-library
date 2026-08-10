@@ -3,6 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreHighlightRequest;
+use App\Http\Requests\UpdateHighlightRequest;
+use App\Http\Resources\HighlightCollection;
+use App\Http\Resources\HighlightResource;
 use App\Models\Book;
 use App\Models\Highlight;
 use Illuminate\Http\JsonResponse;
@@ -12,9 +16,9 @@ use Illuminate\Http\Response;
 class HighlightController extends Controller
 {
     /**
-     * Return the authenticated user's highlights for a book.
+     * Display the authenticated user's highlights for a book.
      */
-    public function index(Request $request, string $uuid): JsonResponse
+    public function index(Request $request, string $uuid): HighlightCollection
     {
         $book = $this->findAccessibleBook($request, $uuid);
 
@@ -25,42 +29,35 @@ class HighlightController extends Controller
             ->orderBy('id')
             ->get();
 
-        return response()->json([
-            'data' => $highlights,
-        ]);
+        return new HighlightCollection($highlights);
     }
 
     /**
-     * Create a highlight.
+     * Store a newly created highlight.
      */
-    public function store(Request $request, string $uuid): JsonResponse
-    {
+    public function store(
+        StoreHighlightRequest $request,
+        string $uuid
+    ): JsonResponse {
         $book = $this->findAccessibleBook($request, $uuid);
-
-        $validated = $request->validate([
-            'current_page' => ['required', 'integer', 'min:1'],
-            'location' => ['nullable', 'string', 'max:1000'],
-            'selected_text' => ['required', 'string'],
-            'note' => ['nullable', 'string'],
-            'color' => ['required', 'string', 'max:50'],
-        ]);
 
         $highlight = Highlight::create([
             'user_id' => $request->user()->id,
             'book_id' => $book->id,
-            ...$validated,
+            ...$request->validated(),
         ]);
 
         return response()->json([
-            'data' => $highlight,
+            'message' => 'Highlight created successfully.',
+            'data' => new HighlightResource($highlight),
         ], Response::HTTP_CREATED);
     }
 
     /**
-     * Update one of the authenticated user's highlights.
+     * Update the specified highlight.
      */
     public function update(
-        Request $request,
+        UpdateHighlightRequest $request,
         string $uuid,
         Highlight $highlight
     ): JsonResponse {
@@ -70,26 +67,22 @@ class HighlightController extends Controller
 
         abort_unless(
             $highlight->user_id === $request->user()->id,
-            Response::HTTP_FORBIDDEN
+            Response::HTTP_FORBIDDEN,
+            'Unauthorized.'
         );
 
-        $validated = $request->validate([
-            'current_page' => ['sometimes', 'integer', 'min:1'],
-            'location' => ['sometimes', 'nullable', 'string', 'max:1000'],
-            'selected_text' => ['sometimes', 'string'],
-            'note' => ['sometimes', 'nullable', 'string'],
-            'color' => ['sometimes', 'string', 'max:50'],
-        ]);
-
-        $highlight->update($validated);
+        $highlight->update($request->validated());
 
         return response()->json([
-            'data' => $highlight->fresh(),
+            'message' => 'Highlight updated successfully.',
+            'data' => new HighlightResource(
+                $highlight->fresh()
+            ),
         ]);
     }
 
     /**
-     * Delete one of the authenticated user's highlights.
+     * Remove the specified highlight.
      */
     public function destroy(
         Request $request,
@@ -102,7 +95,8 @@ class HighlightController extends Controller
 
         abort_unless(
             $highlight->user_id === $request->user()->id,
-            Response::HTTP_FORBIDDEN
+            Response::HTTP_FORBIDDEN,
+            'Unauthorized.'
         );
 
         $highlight->delete();
@@ -111,11 +105,13 @@ class HighlightController extends Controller
     }
 
     /**
-     * Find a published book and ensure the user
-     * currently has permission to read it.
+     * Find a published book and ensure the authenticated
+     * user has an active entitlement.
      */
-    private function findAccessibleBook(Request $request, string $uuid): Book
-    {
+    private function findAccessibleBook(
+        Request $request,
+        string $uuid
+    ): Book {
         $book = Book::query()
             ->where('uuid', $uuid)
             ->where('is_published', true)
@@ -124,19 +120,22 @@ class HighlightController extends Controller
         $hasAccess = $book->entitlements()
             ->where('user_id', $request->user()->id)
             ->where(function ($query) {
-                $query
-                    ->whereNull('expires_at')
+                $query->whereNull('expires_at')
                     ->orWhere('expires_at', '>', now());
             })
             ->exists();
 
-        abort_unless($hasAccess, Response::HTTP_FORBIDDEN);
+        abort_unless(
+            $hasAccess,
+            Response::HTTP_FORBIDDEN,
+            'You do not have access to this book.'
+        );
 
         return $book;
     }
 
     /**
-     * Ensure the highlight belongs to the book in the URL.
+     * Ensure the highlight belongs to the requested book.
      */
     private function ensureHighlightBelongsToBook(
         Highlight $highlight,
@@ -144,7 +143,8 @@ class HighlightController extends Controller
     ): void {
         abort_unless(
             $highlight->book_id === $book->id,
-            Response::HTTP_NOT_FOUND
+            Response::HTTP_NOT_FOUND,
+            'Highlight not found.'
         );
     }
 }
