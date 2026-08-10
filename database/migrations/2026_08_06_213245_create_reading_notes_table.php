@@ -14,24 +14,65 @@ return new class extends Migration
         Schema::create('reading_notes', function (Blueprint $table) {
             $table->id();
 
+            /*
+            |--------------------------------------------------------------------------
+            | Owner
+            |--------------------------------------------------------------------------
+            */
+
             $table->foreignId('user_id')
                 ->constrained()
                 ->cascadeOnDelete();
+
+            /*
+            |--------------------------------------------------------------------------
+            | Book
+            |--------------------------------------------------------------------------
+            */
 
             $table->foreignId('book_id')
                 ->constrained()
                 ->cascadeOnDelete();
 
+            /*
+            |--------------------------------------------------------------------------
+            | Note position
+            |--------------------------------------------------------------------------
+            |
+            | current_page supports PDF/page-based books.
+            | location supports EPUB and future reader formats.
+            |
+            */
+
             $table->unsignedInteger('current_page')->nullable();
 
-            $table->string('location')->nullable();
+            $table->string('location', 1000)->nullable();
+
+            /*
+            |--------------------------------------------------------------------------
+            | Note content
+            |--------------------------------------------------------------------------
+            */
 
             $table->text('note');
 
             $table->timestamps();
 
-            $table->index(['user_id', 'book_id']);
-            $table->index(['user_id', 'book_id', 'current_page']);
+            /*
+            |--------------------------------------------------------------------------
+            | Index
+            |--------------------------------------------------------------------------
+            |
+            | Optimized for retrieving a user's notes for a specific
+            | book and ordering/filtering them by page.
+            |
+            */
+
+            $table->index([
+                'user_id',
+                'book_id',
+                'current_page',
+            ]);
         });
     }
 

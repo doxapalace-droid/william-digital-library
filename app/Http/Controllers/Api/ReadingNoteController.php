@@ -3,6 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreReadingNoteRequest;
+use App\Http\Requests\UpdateReadingNoteRequest;
+use App\Http\Resources\ReadingNoteCollection;
+use App\Http\Resources\ReadingNoteResource;
 use App\Models\Book;
 use App\Models\ReadingNote;
 use Illuminate\Http\JsonResponse;
@@ -12,47 +16,43 @@ use Illuminate\Http\Response;
 class ReadingNoteController extends Controller
 {
     /**
-     * Return the authenticated user's reading notes for a book.
+     * Display the authenticated user's reading notes for a book.
      */
-    public function index(Request $request, string $uuid): JsonResponse
-    {
+    public function index(
+        Request $request,
+        string $uuid
+    ): ReadingNoteCollection {
         $book = $this->findAccessibleBook($request, $uuid);
 
         $notes = ReadingNote::query()
             ->where('user_id', $request->user()->id)
             ->where('book_id', $book->id)
+            ->orderByRaw('current_page IS NULL')
             ->orderBy('current_page')
             ->orderBy('id')
             ->get();
 
-        return response()->json([
-            'data' => $notes,
-        ]);
+        return new ReadingNoteCollection($notes);
     }
 
     /**
-     * Create a reading note.
+     * Store a new reading note.
      */
-    public function store(Request $request, string $uuid): JsonResponse
-    {
+    public function store(
+        StoreReadingNoteRequest $request,
+        string $uuid
+    ): JsonResponse {
         $book = $this->findAccessibleBook($request, $uuid);
 
-        $validated = $request->validate([
-            'current_page' => ['required', 'integer', 'min:1'],
-            'location' => ['required', 'string', 'max:255'],
-            'note' => ['required', 'string'],
-        ]);
-
-        $note = ReadingNote::create([
+        $readingNote = ReadingNote::create([
             'user_id' => $request->user()->id,
             'book_id' => $book->id,
-            'current_page' => $validated['current_page'],
-            'location' => $validated['location'],
-            'note' => $validated['note'],
+            ...$request->validated(),
         ]);
 
         return response()->json([
-            'data' => $note,
+            'message' => 'Reading note created successfully.',
+            'data' => new ReadingNoteResource($readingNote),
         ], Response::HTTP_CREATED);
     }
 
@@ -60,7 +60,7 @@ class ReadingNoteController extends Controller
      * Update one of the authenticated user's reading notes.
      */
     public function update(
-        Request $request,
+        UpdateReadingNoteRequest $request,
         string $uuid,
         ReadingNote $readingNote
     ): JsonResponse {
@@ -72,16 +72,15 @@ class ReadingNoteController extends Controller
             $readingNote
         );
 
-        $validated = $request->validate([
-            'current_page' => ['required', 'integer', 'min:1'],
-            'location' => ['required', 'string', 'max:255'],
-            'note' => ['required', 'string'],
-        ]);
-
-        $readingNote->update($validated);
+        $readingNote->update(
+            $request->validated()
+        );
 
         return response()->json([
-            'data' => $readingNote->fresh(),
+            'message' => 'Reading note updated successfully.',
+            'data' => new ReadingNoteResource(
+                $readingNote->fresh()
+            ),
         ]);
     }
 
@@ -107,10 +106,13 @@ class ReadingNoteController extends Controller
     }
 
     /**
-     * Find a published book the authenticated user is entitled to access.
+     * Find a published book the authenticated user
+     * currently has permission to access.
      */
-    private function findAccessibleBook(Request $request, string $uuid): Book
-    {
+    private function findAccessibleBook(
+        Request $request,
+        string $uuid
+    ): Book {
         $book = Book::query()
             ->where('uuid', $uuid)
             ->where('is_published', true)
@@ -136,7 +138,8 @@ class ReadingNoteController extends Controller
     }
 
     /**
-     * Ensure the note belongs to the authenticated user and requested book.
+     * Ensure the reading note belongs to both the authenticated
+     * user and the requested book.
      */
     private function ensureOwnedNote(
         Request $request,
@@ -144,10 +147,15 @@ class ReadingNoteController extends Controller
         ReadingNote $readingNote
     ): void {
         abort_unless(
-            $readingNote->user_id === $request->user()->id
-            && $readingNote->book_id === $book->id,
+            $readingNote->user_id === $request->user()->id,
             Response::HTTP_FORBIDDEN,
             'You do not have permission to modify this reading note.'
+        );
+
+        abort_unless(
+            $readingNote->book_id === $book->id,
+            Response::HTTP_NOT_FOUND,
+            'Reading note not found.'
         );
     }
 }

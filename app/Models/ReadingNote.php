@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ReadingNote extends Model
 {
+    use HasFactory;
+
     /**
      * Attributes that may be mass assigned.
      */
@@ -17,6 +20,16 @@ class ReadingNote extends Model
         'location',
         'note',
     ];
+
+    /**
+     * Attribute casts.
+     */
+    protected function casts(): array
+    {
+        return [
+            'current_page' => 'integer',
+        ];
+    }
 
     /**
      * The user who created this reading note.
