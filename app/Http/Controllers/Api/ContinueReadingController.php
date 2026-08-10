@@ -10,53 +10,114 @@ use Illuminate\Http\Request;
 class ContinueReadingController extends Controller
 {
     /**
-     * Return books the authenticated user has started reading.
+     * Display the authenticated user's Continue Reading list.
+     *
+     * Returns books:
+     * - owned by the authenticated user
+     * - still entitled to read
+     * - published
+     * - not yet completed
+     * - ordered by most recent reading activity
      */
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
 
-        $progressRecords = ReadingProgress::query()
+        $continueReading = ReadingProgress::query()
+
+            /*
+            |--------------------------------------------------------------------------
+            | Eager Load Book
+            |--------------------------------------------------------------------------
+            */
             ->with('book')
+
+            /*
+            |--------------------------------------------------------------------------
+            | Current User
+            |--------------------------------------------------------------------------
+            */
             ->where('user_id', $user->id)
 
-            // Only include published books.
+            /*
+            |--------------------------------------------------------------------------
+            | Exclude Completed Books
+            |--------------------------------------------------------------------------
+            */
+            ->where('progress_percentage', '<', 100)
+
+            /*
+            |--------------------------------------------------------------------------
+            | Only Published Books
+            |--------------------------------------------------------------------------
+            */
             ->whereHas('book', function ($query) {
                 $query->where('is_published', true);
             })
 
-            // User must still have a valid entitlement.
+            /*
+            |--------------------------------------------------------------------------
+            | Verify Active Book Entitlement
+            |--------------------------------------------------------------------------
+            */
             ->whereHas('book.entitlements', function ($query) use ($user) {
+
                 $query
                     ->where('user_id', $user->id)
+                    ->where('status', 'active')
+                    ->where('can_read', true)
+                    ->whereNull('revoked_at')
                     ->where(function ($query) {
+
                         $query
                             ->whereNull('expires_at')
                             ->orWhere('expires_at', '>', now());
+
                     });
+
             })
 
-            // Most recently read books first.
+            /*
+            |--------------------------------------------------------------------------
+            | Most Recent First
+            |--------------------------------------------------------------------------
+            */
             ->orderByDesc('last_read_at')
+
             ->get();
 
-        $books = $progressRecords->map(function (ReadingProgress $progress) {
-            $book = $progress->book;
-
-            return [
-                'id' => $book->id,
-                'uuid' => $book->uuid,
-                'title' => $book->title,
-                'slug' => $book->slug,
-                'current_page' => $progress->current_page,
-                'total_pages' => $progress->total_pages,
-                'progress_percentage' => $progress->progress_percentage,
-                'last_read_at' => $progress->last_read_at,
-            ];
-        })->values();
-
         return response()->json([
-            'data' => $books,
+
+            'data' => $continueReading->map(function (ReadingProgress $progress) {
+
+                $book = $progress->book;
+
+                return [
+
+                    'id' => $book->id,
+
+                    'uuid' => $book->uuid,
+
+                    'title' => $book->title,
+
+                    'slug' => $book->slug,
+
+                    'cover_image' => $book->cover_image,
+
+                    'author' => $book->author,
+
+                    'current_page' => $progress->current_page,
+
+                    'total_pages' => $progress->total_pages,
+
+                    'progress_percentage' => $progress->progress_percentage,
+
+                    'last_read_at' => $progress->last_read_at,
+
+                ];
+
+            })->values(),
+
         ]);
     }
 }

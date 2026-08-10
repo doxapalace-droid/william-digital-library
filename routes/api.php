@@ -1,6 +1,7 @@
 <?php
 
-
+use App\Http\Controllers\Api\ReviewController;
+use App\Http\Controllers\Api\RecommendationController;
 use App\Http\Controllers\Api\RecentlyViewedController;
 use App\Http\Controllers\Api\BookController;
 use App\Http\Controllers\Api\BookDownloadController;
@@ -203,6 +204,22 @@ Route::middleware([
 Route::middleware('auth:sanctum')->group(function () {
 
 
+        /*
+    |--------------------------------------------------------------------------
+    | Book Reviews
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get('/books/{book}/reviews', [ReviewController::class, 'index']);
+
+    Route::post('/books/{book}/reviews', [ReviewController::class, 'store']);
+
+    Route::put('/reviews/{review}', [ReviewController::class, 'update']);
+
+    Route::delete('/reviews/{review}', [ReviewController::class, 'destroy']);
+
+
+
     /*
     |--------------------------------------------------------------------------
     | Authenticated User Profile
@@ -221,6 +238,11 @@ Route::middleware('auth:sanctum')->group(function () {
     RecentlyViewedController::class,
     'index',
     ]);
+
+
+     // other routes...
+
+        Route::get('/recommendations', [RecommendationController::class, 'index']);
          /*
     |--------------------------------------------------------------------------
     | My Recently Viewed Books

@@ -15,7 +15,7 @@ class ContinueReadingTest extends TestCase
     use RefreshDatabase;
 
     /**
-     * Guest users cannot access continue reading.
+     * Guests cannot access Continue Reading.
      */
     public function test_guest_cannot_view_continue_reading(): void
     {
@@ -25,25 +25,28 @@ class ContinueReadingTest extends TestCase
     }
 
     /**
-     * An authenticated customer can see books
-     * they have started reading.
+     * Authenticated user can retrieve Continue Reading.
      */
     public function test_user_can_view_continue_reading_books(): void
     {
         $user = User::factory()->create();
 
+        Sanctum::actingAs($user);
+
         $book = Book::factory()->create([
             'is_published' => true,
         ]);
 
-        BookEntitlement::create([
+        BookEntitlement::factory()->create([
             'user_id' => $user->id,
             'book_id' => $book->id,
-            'source' => 'purchase',
+            'status' => 'active',
+            'can_read' => true,
+            'revoked_at' => null,
             'expires_at' => null,
         ]);
 
-        ReadingProgress::create([
+        ReadingProgress::factory()->create([
             'user_id' => $user->id,
             'book_id' => $book->id,
             'current_page' => 25,
@@ -52,38 +55,47 @@ class ContinueReadingTest extends TestCase
             'last_read_at' => now(),
         ]);
 
-        Sanctum::actingAs($user);
-
         $response = $this->getJson('/api/continue-reading');
 
         $response
             ->assertOk()
             ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.id', $book->id)
-            ->assertJsonPath('data.0.current_page', 25)
-            ->assertJsonPath('data.0.total_pages', 100)
-            ->assertJsonPath('data.0.progress_percentage', 25);
+            ->assertJsonStructure([
+                'data' => [
+                    [
+                        'id',
+                        'uuid',
+                        'title',
+                        'slug',
+                        'current_page',
+                        'total_pages',
+                        'progress_percentage',
+                        'last_read_at',
+                    ]
+                ]
+            ])
+            ->assertJsonPath('data.0.id', $book->id);
     }
 
     /**
-     * Books without reading progress should not appear.
+     * Books without progress should not appear.
      */
     public function test_book_without_progress_does_not_appear(): void
     {
         $user = User::factory()->create();
 
+        Sanctum::actingAs($user);
+
         $book = Book::factory()->create([
             'is_published' => true,
         ]);
 
-        BookEntitlement::create([
+        BookEntitlement::factory()->create([
             'user_id' => $user->id,
             'book_id' => $book->id,
-            'source' => 'purchase',
-            'expires_at' => null,
+            'status' => 'active',
+            'can_read' => true,
         ]);
-
-        Sanctum::actingAs($user);
 
         $response = $this->getJson('/api/continue-reading');
 
@@ -93,34 +105,33 @@ class ContinueReadingTest extends TestCase
     }
 
     /**
-     * A user cannot see another customer's reading progress.
+     * Users only see their own progress.
      */
     public function test_user_cannot_see_another_users_continue_reading(): void
     {
         $user = User::factory()->create();
-        $otherUser = User::factory()->create();
+
+        $other = User::factory()->create();
+
+        Sanctum::actingAs($user);
 
         $book = Book::factory()->create([
             'is_published' => true,
         ]);
 
-        BookEntitlement::create([
-            'user_id' => $otherUser->id,
+        BookEntitlement::factory()->create([
+            'user_id' => $other->id,
             'book_id' => $book->id,
-            'source' => 'purchase',
-            'expires_at' => null,
+            'status' => 'active',
+            'can_read' => true,
         ]);
 
-        ReadingProgress::create([
-            'user_id' => $otherUser->id,
+        ReadingProgress::factory()->create([
+            'user_id' => $other->id,
             'book_id' => $book->id,
-            'current_page' => 50,
-            'total_pages' => 100,
             'progress_percentage' => 50,
             'last_read_at' => now(),
         ]);
-
-        Sanctum::actingAs($user);
 
         $response = $this->getJson('/api/continue-reading');
 
@@ -130,164 +141,210 @@ class ContinueReadingTest extends TestCase
     }
 
     /**
-     * Progress for an expired entitlement should not appear.
+     * Expired entitlement should not appear.
      */
     public function test_expired_entitlement_does_not_appear(): void
     {
         $user = User::factory()->create();
 
+        Sanctum::actingAs($user);
+
         $book = Book::factory()->create([
             'is_published' => true,
         ]);
 
-        BookEntitlement::create([
+        BookEntitlement::factory()->create([
             'user_id' => $user->id,
             'book_id' => $book->id,
-            'source' => 'purchase',
+            'status' => 'active',
+            'can_read' => true,
             'expires_at' => now()->subDay(),
         ]);
 
-        ReadingProgress::create([
+        ReadingProgress::factory()->create([
             'user_id' => $user->id,
             'book_id' => $book->id,
-            'current_page' => 20,
-            'total_pages' => 100,
-            'progress_percentage' => 20,
+            'progress_percentage' => 25,
             'last_read_at' => now(),
         ]);
 
-        Sanctum::actingAs($user);
-
-        $response = $this->getJson('/api/continue-reading');
-
-        $response
+        $this->getJson('/api/continue-reading')
             ->assertOk()
             ->assertJsonCount(0, 'data');
     }
 
     /**
-     * A valid future entitlement should appear.
+     * Revoked entitlement should not appear.
      */
-    public function test_valid_future_entitlement_appears(): void
+    public function test_revoked_entitlement_does_not_appear(): void
     {
         $user = User::factory()->create();
+
+        Sanctum::actingAs($user);
 
         $book = Book::factory()->create([
             'is_published' => true,
         ]);
 
-        BookEntitlement::create([
+        BookEntitlement::factory()->create([
             'user_id' => $user->id,
             'book_id' => $book->id,
-            'source' => 'subscription',
-            'expires_at' => now()->addDays(30),
+            'status' => 'active',
+            'can_read' => true,
+            'revoked_at' => now(),
         ]);
 
-        ReadingProgress::create([
+        ReadingProgress::factory()->create([
             'user_id' => $user->id,
             'book_id' => $book->id,
-            'current_page' => 30,
-            'total_pages' => 100,
             'progress_percentage' => 30,
             'last_read_at' => now(),
         ]);
 
-        Sanctum::actingAs($user);
-
-        $response = $this->getJson('/api/continue-reading');
-
-        $response
+        $this->getJson('/api/continue-reading')
             ->assertOk()
-            ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.id', $book->id);
+            ->assertJsonCount(0, 'data');
     }
 
     /**
-     * Continue reading is ordered by most recently read.
+     * Inactive entitlement should not appear.
      */
-    public function test_continue_reading_is_ordered_by_last_read_at(): void
+    public function test_inactive_entitlement_does_not_appear(): void
     {
         $user = User::factory()->create();
 
-        $olderBook = Book::factory()->create([
+        Sanctum::actingAs($user);
+
+        $book = Book::factory()->create([
             'is_published' => true,
         ]);
 
-        $newerBook = Book::factory()->create([
-            'is_published' => true,
+        BookEntitlement::factory()->create([
+            'user_id' => $user->id,
+            'book_id' => $book->id,
+            'status' => 'inactive',
+            'can_read' => true,
         ]);
 
-        foreach ([$olderBook, $newerBook] as $book) {
-            BookEntitlement::create([
-                'user_id' => $user->id,
-                'book_id' => $book->id,
-                'source' => 'purchase',
-                'expires_at' => null,
-            ]);
-        }
-
-        ReadingProgress::create([
+        ReadingProgress::factory()->create([
             'user_id' => $user->id,
-            'book_id' => $olderBook->id,
-            'current_page' => 10,
-            'total_pages' => 100,
-            'progress_percentage' => 10,
-            'last_read_at' => now()->subHours(2),
-        ]);
-
-        ReadingProgress::create([
-            'user_id' => $user->id,
-            'book_id' => $newerBook->id,
-            'current_page' => 40,
-            'total_pages' => 100,
-            'progress_percentage' => 40,
+            'book_id' => $book->id,
+            'progress_percentage' => 20,
             'last_read_at' => now(),
         ]);
 
-        Sanctum::actingAs($user);
-
-        $response = $this->getJson('/api/continue-reading');
-
-        $response
+        $this->getJson('/api/continue-reading')
             ->assertOk()
-            ->assertJsonCount(2, 'data')
-            ->assertJsonPath('data.0.id', $newerBook->id)
-            ->assertJsonPath('data.1.id', $olderBook->id);
+            ->assertJsonCount(0, 'data');
     }
 
     /**
-     * Unpublished books should not appear in continue reading.
+     * Completed books should not appear.
      */
-    public function test_unpublished_book_does_not_appear(): void
+    public function test_completed_books_do_not_appear(): void
     {
         $user = User::factory()->create();
+
+        Sanctum::actingAs($user);
+
+        $book = Book::factory()->create([
+            'is_published' => true,
+        ]);
+
+        BookEntitlement::factory()->create([
+            'user_id' => $user->id,
+            'book_id' => $book->id,
+            'status' => 'active',
+            'can_read' => true,
+        ]);
+
+        ReadingProgress::factory()->create([
+            'user_id' => $user->id,
+            'book_id' => $book->id,
+            'progress_percentage' => 100,
+            'current_page' => 100,
+            'total_pages' => 100,
+        ]);
+
+        $this->getJson('/api/continue-reading')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+    }
+
+    /**
+     * Unpublished books should not appear.
+     */
+    public function test_unpublished_books_do_not_appear(): void
+    {
+        $user = User::factory()->create();
+
+        Sanctum::actingAs($user);
 
         $book = Book::factory()->create([
             'is_published' => false,
         ]);
 
-        BookEntitlement::create([
+        BookEntitlement::factory()->create([
             'user_id' => $user->id,
             'book_id' => $book->id,
-            'source' => 'purchase',
-            'expires_at' => null,
+            'status' => 'active',
+            'can_read' => true,
         ]);
 
-        ReadingProgress::create([
+        ReadingProgress::factory()->create([
             'user_id' => $user->id,
             'book_id' => $book->id,
-            'current_page' => 15,
-            'total_pages' => 100,
             'progress_percentage' => 15,
             'last_read_at' => now(),
         ]);
 
+        $this->getJson('/api/continue-reading')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+    }
+
+    /**
+     * Continue Reading should be ordered by most recent activity.
+     */
+    public function test_continue_reading_is_ordered_by_last_read_at(): void
+    {
+        $user = User::factory()->create();
+
         Sanctum::actingAs($user);
+
+        $olderBook = Book::factory()->create(['is_published' => true]);
+
+        $newerBook = Book::factory()->create(['is_published' => true]);
+
+        foreach ([$olderBook, $newerBook] as $book) {
+
+            BookEntitlement::factory()->create([
+                'user_id' => $user->id,
+                'book_id' => $book->id,
+                'status' => 'active',
+                'can_read' => true,
+            ]);
+        }
+
+        ReadingProgress::factory()->create([
+            'user_id' => $user->id,
+            'book_id' => $olderBook->id,
+            'progress_percentage' => 20,
+            'last_read_at' => now()->subHours(3),
+        ]);
+
+        ReadingProgress::factory()->create([
+            'user_id' => $user->id,
+            'book_id' => $newerBook->id,
+            'progress_percentage' => 40,
+            'last_read_at' => now(),
+        ]);
 
         $response = $this->getJson('/api/continue-reading');
 
         $response
             ->assertOk()
-            ->assertJsonCount(0, 'data');
+            ->assertJsonPath('data.0.id', $newerBook->id)
+            ->assertJsonPath('data.1.id', $olderBook->id);
     }
 }

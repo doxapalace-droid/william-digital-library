@@ -32,20 +32,10 @@ class Book extends Model
         'is_featured',
         'is_published',
         'published_at',
+        'average_rating',
+        'reviews_count',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     */
-    protected function casts(): array
-    {
-        return [
-            'price' => 'decimal:2',
-            'is_featured' => 'boolean',
-            'is_published' => 'boolean',
-            'published_at' => 'datetime',
-        ];
-    }
 
     /**
      * Entitlements granted for this book.
@@ -117,5 +107,30 @@ class Book extends Model
         return $this->hasMany(Favorite::class);
     }
 
+    
+    /**
+     * Get the attributes that should be cast.
+     */
+
+
+   protected function casts(): array
+    {
+    return [
+
+        'price' => 'decimal:2',
+
+        'is_featured' => 'boolean',
+
+        'is_published' => 'boolean',
+
+        'published_at' => 'datetime',
+
+        'average_rating' => 'float',
+
+        'reviews_count' => 'integer',
+
+    ];
+    
+    }
 
 }

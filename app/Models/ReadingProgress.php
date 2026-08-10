@@ -2,18 +2,21 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ReadingProgress extends Model
 {
+    use HasFactory;
+
     /**
      * The table associated with the model.
      */
     protected $table = 'reading_progress';
 
     /**
-     * Attributes that may be mass assigned.
+     * The attributes that are mass assignable.
      */
     protected $fillable = [
         'user_id',
@@ -26,7 +29,7 @@ class ReadingProgress extends Model
     ];
 
     /**
-     * Attribute casts.
+     * The attributes that should be cast.
      */
     protected function casts(): array
     {
@@ -39,7 +42,7 @@ class ReadingProgress extends Model
     }
 
     /**
-     * The customer whose reading progress this is.
+     * Get the user that owns the reading progress.
      */
     public function user(): BelongsTo
     {
@@ -47,7 +50,7 @@ class ReadingProgress extends Model
     }
 
     /**
-     * The book being read.
+     * Get the book being read.
      */
     public function book(): BelongsTo
     {
