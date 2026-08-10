@@ -23,31 +23,54 @@ return new class extends Migration
                 ->cascadeOnDelete();
 
             /*
-            |--------------------------------------------------------------
+            |--------------------------------------------------------------------------
             | Bookmark position
-            |--------------------------------------------------------------
+            |--------------------------------------------------------------------------
             |
-            | current_page supports page-based books such as PDFs.
-            | location gives us flexibility for other reader formats later.
+            | current_page supports PDF/page-based books.
+            | location supports EPUB and future reader formats.
             |
             */
+
             $table->unsignedInteger('current_page')->nullable();
 
-            $table->string('location')->nullable();
+            $table->string('location', 1000)->nullable();
 
             /*
-            | Optional customer-created label or note.
+            |--------------------------------------------------------------------------
+            | Optional bookmark label.
+            |--------------------------------------------------------------------------
             */
+
             $table->string('label')->nullable();
+
+            /*
+            |--------------------------------------------------------------------------
+            | Optional note attached to the bookmark.
+            |--------------------------------------------------------------------------
+            */
+
             $table->text('note')->nullable();
 
             $table->timestamps();
 
             /*
-            | Helps us efficiently retrieve a customer's
-            | bookmarks for a particular book.
+            |--------------------------------------------------------------------------
+            | Indexes
+            |--------------------------------------------------------------------------
             */
+
             $table->index(['user_id', 'book_id']);
+
+            $table->index(['book_id', 'current_page']);
+
+            // Uncomment if duplicate bookmarks should not be allowed.
+            // $table->unique([
+            //     'user_id',
+            //     'book_id',
+            //     'current_page',
+            //     'location',
+            // ]);
         });
     }
 
