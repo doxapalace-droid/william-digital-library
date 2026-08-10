@@ -282,28 +282,31 @@ Route::middleware('auth:sanctum')->group(function () {
 
 
     /*
-    |--------------------------------------------------------------------------
-    | Reader Preferences
-    |--------------------------------------------------------------------------
-    |
-    | Authenticated users can retrieve and update their personal reader
-    | appearance and layout preferences.
-    |
-    | Each preference record belongs exclusively to the authenticated user.
-    |
-    */
+|--------------------------------------------------------------------------
+| Reader Preferences
+|--------------------------------------------------------------------------
+|
+| Authenticated users can retrieve, create, and update their personal
+| reader appearance and layout preferences.
+|
+| Each preference record belongs exclusively to the authenticated user.
+|
+*/
 
-    Route::get('/reader-preferences', [
-        ReaderPreferenceController::class,
-        'show',
-    ]);
+Route::get('/reader-preferences', [
+    ReaderPreferenceController::class,
+    'show',
+]);
 
+Route::post('/reader-preferences', [
+    ReaderPreferenceController::class,
+    'store',
+]);
 
-    Route::put('/reader-preferences', [
-        ReaderPreferenceController::class,
-        'update',
-    ]);
-
+Route::put('/reader-preferences', [
+    ReaderPreferenceController::class,
+    'update',
+]);
 
     /*
     |--------------------------------------------------------------------------

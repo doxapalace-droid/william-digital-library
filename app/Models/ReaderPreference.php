@@ -31,7 +31,7 @@ class ReaderPreference extends Model
     }
 
     /**
-     * The customer these reader preferences belong to.
+     * The user these reader preferences belong to.
      */
     public function user(): BelongsTo
     {

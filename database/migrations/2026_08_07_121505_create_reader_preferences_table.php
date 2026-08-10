@@ -14,6 +14,14 @@ return new class extends Migration
         Schema::create('reader_preferences', function (Blueprint $table) {
             $table->id();
 
+            /*
+            |--------------------------------------------------------------------------
+            | User
+            |--------------------------------------------------------------------------
+            |
+            | Each preference record belongs to one authenticated user.
+            |
+            */
             $table->foreignId('user_id')
                 ->constrained()
                 ->cascadeOnDelete();
@@ -27,25 +35,32 @@ return new class extends Migration
             | their digital reading experience.
             |
             */
-
             $table->string('theme')->default('light');
 
-            $table->unsignedTinyInteger('font_size')->default(18);
+            $table->unsignedTinyInteger('font_size')
+                ->default(18);
 
-            $table->string('font_family')->default('serif');
+            $table->string('font_family')
+                ->default('serif');
 
-            $table->decimal('line_spacing', 3, 2)->default(1.60);
+            $table->decimal('line_spacing', 3, 2)
+                ->default(1.60);
 
             /*
             |--------------------------------------------------------------------------
             | Reader Layout
             |--------------------------------------------------------------------------
             */
-
-            $table->string('reading_mode')->default('paginated');
+            $table->string('reading_mode')
+                ->default('paginated');
 
             /*
-            | One preference record per customer.
+            |--------------------------------------------------------------------------
+            | Constraints
+            |--------------------------------------------------------------------------
+            |
+            | Each customer can have only one reader preference record.
+            |
             */
             $table->unique('user_id');
 

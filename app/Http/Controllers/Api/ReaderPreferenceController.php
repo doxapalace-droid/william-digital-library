@@ -3,15 +3,18 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreReaderPreferenceRequest;
+use App\Http\Requests\UpdateReaderPreferenceRequest;
+use App\Http\Resources\ReaderPreferenceResource;
 use App\Models\ReaderPreference;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
+use Illuminate\Http\Response;
 
 class ReaderPreferenceController extends Controller
 {
     /**
-     * Return the authenticated user's reader preferences.
+     * Display the authenticated user's reader preferences.
      */
     public function show(Request $request): JsonResponse
     {
@@ -20,75 +23,62 @@ class ReaderPreferenceController extends Controller
             ->first();
 
         return response()->json([
-            'data' => $preference ? [
-                'font_size' => $preference->font_size,
-                'font_family' => $preference->font_family,
-                'theme' => $preference->theme,
-                'line_spacing' => $preference->line_spacing,
-            ] : null,
+            'data' => $preference
+                ? new ReaderPreferenceResource($preference)
+                : null,
         ]);
     }
 
     /**
-     * Create or update the authenticated user's
-     * reader preferences.
+     * Create the authenticated user's reader preferences.
      */
-    public function update(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'font_size' => [
-                'required',
-                'integer',
-                'min:12',
-                'max:36',
-            ],
+    public function store(
+        StoreReaderPreferenceRequest $request
+    ): JsonResponse {
+        $preference = ReaderPreference::query()
+            ->where('user_id', $request->user()->id)
+            ->first();
 
-            'font_family' => [
-                'required',
-                'string',
-                Rule::in([
-                    'serif',
-                    'sans-serif',
-                ]),
-            ],
+        if ($preference) {
+            return response()->json([
+                'message' => 'Reader preferences already exist.',
+                'data' => new ReaderPreferenceResource($preference),
+            ], Response::HTTP_CONFLICT);
+        }
 
-            'theme' => [
-                'required',
-                'string',
-                Rule::in([
-                    'light',
-                    'dark',
-                    'sepia',
-                ]),
-            ],
-
-            'line_spacing' => [
-                'required',
-                'numeric',
-                'min:1',
-                'max:3',
-            ],
+        $preference = ReaderPreference::create([
+            'user_id' => $request->user()->id,
+            ...$request->validated(),
         ]);
 
+        return response()->json([
+            'message' => 'Reader preferences created successfully.',
+            'data' => new ReaderPreferenceResource($preference),
+        ], Response::HTTP_CREATED);
+    }
+
+    /**
+     * Create or update the authenticated user's reader preferences.
+     *
+     * PUT is treated as an upsert:
+     * - Creates the preferences if they do not exist.
+     * - Updates the existing preferences if they already exist.
+     */
+    public function update(
+        UpdateReaderPreferenceRequest $request
+    ): JsonResponse {
         $preference = ReaderPreference::updateOrCreate(
             [
                 'user_id' => $request->user()->id,
             ],
-            [
-                'font_size' => $validated['font_size'],
-                'font_family' => $validated['font_family'],
-                'theme' => $validated['theme'],
-                'line_spacing' => $validated['line_spacing'],
-            ]
+            $request->validated()
         );
 
         return response()->json([
-            'data' => [
-                'font_size' => $preference->font_size,
-                'font_family' => $preference->font_family,
-                'theme' => $preference->theme,
-                'line_spacing' => $preference->line_spacing,
-            ],
+            'message' => 'Reader preferences saved successfully.',
+            'data' => new ReaderPreferenceResource(
+                $preference->fresh()
+            ),
         ]);
     }
 }
