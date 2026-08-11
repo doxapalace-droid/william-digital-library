@@ -2,17 +2,18 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use App\Traits\HasUuid;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-
 class Book extends Model
 {
-    use HasFactory,HasUuid, SoftDeletes;
+    use HasFactory;
+    use HasUuid;
+    use SoftDeletes;
 
     /**
      * Attributes that may be mass assigned.
@@ -36,7 +37,6 @@ class Book extends Model
         'reviews_count',
     ];
 
-
     /**
      * Entitlements granted for this book.
      *
@@ -48,16 +48,15 @@ class Book extends Model
         return $this->hasMany(BookEntitlement::class);
     }
 
-
     /**
- * Reading progress records for this book.
- *
- * Each record represents a customer's current
- * reading position and progress in this book.
- */
+     * Reading progress records for this book.
+     *
+     * Each record represents a customer's current
+     * reading position and progress in this book.
+     */
     public function readingProgress(): HasMany
     {
-    return $this->hasMany(ReadingProgress::class);
+        return $this->hasMany(ReadingProgress::class);
     }
 
     /**
@@ -71,66 +70,51 @@ class Book extends Model
         return $this->belongsToMany(Category::class)
             ->withTimestamps();
     }
-   
+
     /**
- * Bookmarks customers have created for this book.
- */
+     * Bookmarks customers have created for this book.
+     */
     public function bookmarks(): HasMany
     {
         return $this->hasMany(Bookmark::class);
     }
-   
-        /**
- * Highlights created for this book.
- */
+
+    /**
+     * Highlights created for this book.
+     */
     public function highlights(): HasMany
     {
         return $this->hasMany(Highlight::class);
     }
 
-
-
     /**
- * Reading notes created for this book.
- */
+     * Reading notes created for this book.
+     */
     public function readingNotes(): HasMany
     {
-     return $this->hasMany(ReadingNote::class);
+        return $this->hasMany(ReadingNote::class);
     }
 
-
     /**
-    * Users' favorite records for this book.
-    */
+     * Users' favorite records for this book.
+     */
     public function favorites(): HasMany
     {
         return $this->hasMany(Favorite::class);
     }
 
-    
     /**
      * Get the attributes that should be cast.
      */
-
-
-   protected function casts(): array
+    protected function casts(): array
     {
-    return [
-
-        'price' => 'decimal:2',
-
-        'is_featured' => 'boolean',
-
-        'is_published' => 'boolean',
-
-        'published_at' => 'datetime',
-
-        'average_rating' => 'float',
-
-        'reviews_count' => 'integer',
-
-    ];
-    
+        return [
+            'price' => 'decimal:2',
+            'is_featured' => 'boolean',
+            'is_published' => 'boolean',
+            'published_at' => 'datetime',
+            'average_rating' => 'float',
+            'reviews_count' => 'integer',
+        ];
     }
-
 }

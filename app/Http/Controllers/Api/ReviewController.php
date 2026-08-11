@@ -2,8 +2,6 @@
 
 namespace App\Http\Controllers\Api;
 
-
-use App\Services\BookRatingService;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreReviewRequest;
 use App\Http\Requests\UpdateReviewRequest;
@@ -13,93 +11,84 @@ use App\Models\Book;
 use App\Models\Review;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 
 class ReviewController extends Controller
 {
     /**
-     * Display all reviews for a book.
+     * Display all reviews for an accessible published book.
      */
-    public function index(Book $book): JsonResponse
-    {
-        $reviews = $book->reviews()
+    public function index(
+        Request $request,
+        string $uuid
+    ): ReviewCollection {
+        $book = $this->findAccessibleBook($request, $uuid);
+
+        $reviews = Review::query()
+            ->where('book_id', $book->id)
             ->with('user:id,name')
             ->latest()
             ->get();
 
-        return response()->json([
-            'average_rating' => round(
-                $book->reviews()->avg('rating') ?? 0,
-                1
-            ),
-
-            'review_count' => $book->reviews()->count(),
-
-            'data' => new ReviewCollection($reviews),
-        ]);
+        return new ReviewCollection($reviews);
     }
 
     /**
      * Store a new review.
      */
-    public function store(StoreReviewRequest $request, Book $book): JsonResponse
-    {
+    public function store(
+        StoreReviewRequest $request,
+        string $uuid
+    ): JsonResponse {
+        $book = $this->findAccessibleBook($request, $uuid);
+
         $user = $request->user();
 
-        // Ensure the user owns the book.
-        $ownsBook = $user->bookEntitlements()
+        /*
+         * A user may only review a book once.
+         */
+        $alreadyReviewed = Review::query()
+            ->where('user_id', $user->id)
             ->where('book_id', $book->id)
-            ->where(function ($query) {
-                $query->whereNull('expires_at')
-                    ->orWhere('expires_at', '>', now());
-            })
             ->exists();
 
-        abort_unless(
-            $ownsBook,
-            403,
-            'You cannot review a book you do not own.'
+        abort_if(
+            $alreadyReviewed,
+            Response::HTTP_UNPROCESSABLE_ENTITY,
+            'You have already reviewed this book.'
         );
 
-        // Prevent duplicate reviews.
-        if (
-            Review::where('user_id', $user->id)
-                ->where('book_id', $book->id)
-                ->exists()
-        ) {
-            return response()->json([
-                'message' => 'You have already reviewed this book.',
-            ], 422);
-        }
-
-        $data = $request->validated();
-
-        $data['user_id'] = $user->id;
-        $data['book_id'] = $book->id;
-
-        $review = Review::create($data);
+        $review = Review::create([
+            'user_id' => $user->id,
+            'book_id' => $book->id,
+            ...$request->validated(),
+        ]);
 
         return response()->json([
             'message' => 'Review submitted successfully.',
-            'data' => new ReviewResource($review),
-        ], 201);
+            'data' => new ReviewResource($review->fresh()),
+        ], Response::HTTP_CREATED);
     }
 
     /**
-     * Update a review.
+     * Update the authenticated user's own review.
      */
     public function update(
         UpdateReviewRequest $request,
+        string $uuid,
         Review $review
     ): JsonResponse {
-        abort_if(
-            $review->user_id !== $request->user()->id,
-            403,
+        $book = $this->findAccessibleBook($request, $uuid);
+
+        $this->ensureReviewBelongsToBook($review, $book);
+
+        abort_unless(
+            $review->user_id === $request->user()->id,
+            Response::HTTP_FORBIDDEN,
             'Unauthorized.'
         );
 
-        $review->update(
-            $request->validated()
-        );
+        $review->update($request->validated());
 
         return response()->json([
             'message' => 'Review updated successfully.',
@@ -108,22 +97,71 @@ class ReviewController extends Controller
     }
 
     /**
-     * Delete a review.
+     * Delete the authenticated user's own review.
      */
     public function destroy(
         Request $request,
+        string $uuid,
         Review $review
-    ): JsonResponse {
-        abort_if(
-            $review->user_id !== $request->user()->id,
-            403,
+    ): Response {
+        $book = $this->findAccessibleBook($request, $uuid);
+
+        $this->ensureReviewBelongsToBook($review, $book);
+
+        abort_unless(
+            $review->user_id === $request->user()->id,
+            Response::HTTP_FORBIDDEN,
             'Unauthorized.'
         );
 
         $review->delete();
 
-        return response()->json([
-            'message' => 'Review deleted successfully.',
-        ]);
+        return response()->noContent();
+    }
+
+    /**
+     * Find a published book the authenticated user can access.
+     */
+    private function findAccessibleBook(
+        Request $request,
+        string $uuid
+    ): Book {
+        $book = Book::query()
+            ->where('uuid', $uuid)
+            ->where('is_published', true)
+            ->firstOrFail();
+
+        $hasAccess = $book->entitlements()
+            ->where('user_id', $request->user()->id)
+            ->where('can_read', true)
+            ->where('status', 'active')
+            ->where(function ($query) {
+                $query
+                    ->whereNull('expires_at')
+                    ->orWhere('expires_at', '>', now());
+            })
+            ->exists();
+
+        abort_unless(
+            $hasAccess,
+            Response::HTTP_FORBIDDEN,
+            'You do not have access to this book.'
+        );
+
+        return $book;
+    }
+
+    /**
+     * Ensure the review belongs to the requested book.
+     */
+    private function ensureReviewBelongsToBook(
+        Review $review,
+        Book $book
+    ): void {
+        abort_unless(
+            $review->book_id === $book->id,
+            Response::HTTP_NOT_FOUND,
+            'Review not found.'
+        );
     }
 }

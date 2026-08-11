@@ -187,37 +187,54 @@ Route::middleware([
         CategoryController::class,
         'destroy',
     ]);
-});
+    });
 
 
-/*
-|--------------------------------------------------------------------------
-| Authenticated User / Customer Routes
-|--------------------------------------------------------------------------
-|
-| Every route in this group requires a valid Sanctum-authenticated user.
-| Individual controllers remain responsible for verifying ownership,
-| entitlement, and access to book-specific resources.
-|
-*/
-
-Route::middleware('auth:sanctum')->group(function () {
-
-
-        /*
+    /*
+        |--------------------------------------------------------------------------
+    | Authenticated User / Customer Routes
     |--------------------------------------------------------------------------
-    | Book Reviews
+    |
+    | Every route in this group requires a valid Sanctum-authenticated user.
+    | Individual controllers remain responsible for verifying ownership,
+    | entitlement, and access to book-specific resources.
+    |
+    */
+
+    Route::middleware('auth:sanctum')->group(function () {
+
+    /*
+    |--------------------------------------------------------------------------
+    | Reviews
     |--------------------------------------------------------------------------
     */
 
-    Route::get('/books/{book}/reviews', [ReviewController::class, 'index']);
+    Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/books/{uuid}/reviews', [
+        ReviewController::class,
+        'index',
+    ]);
 
-    Route::post('/books/{book}/reviews', [ReviewController::class, 'store']);
+    Route::post('/books/{uuid}/reviews', [
+        ReviewController::class,
+        'store',
+    ]);
 
-    Route::put('/reviews/{review}', [ReviewController::class, 'update']);
+    Route::put('/books/{uuid}/reviews/{review}', [
+        ReviewController::class,
+        'update',
+    ]);
 
-    Route::delete('/reviews/{review}', [ReviewController::class, 'destroy']);
+    Route::patch('/books/{uuid}/reviews/{review}', [
+        ReviewController::class,
+        'update',
+    ]);
 
+    Route::delete('/books/{uuid}/reviews/{review}', [
+        ReviewController::class,
+        'destroy',
+    ]);
+    });
 
 
     /*
@@ -367,10 +384,9 @@ Route::put('/reader-preferences', [
         'update',
     ]);
 
-
     /*
-    |--------------------------------------------------------------------------
-    | Favorites
+            |--------------------------------------------------------------------------
+|    Favorites  
     |--------------------------------------------------------------------------
     |
     | Favorites allow customers to mark entitled books for quick access.
@@ -393,20 +409,18 @@ Route::put('/reader-preferences', [
     */
 
     Route::get('/books/{uuid}/favorites', [
-        FavoriteController::class,
-        'show',
+    FavoriteController::class,
+    'show',
     ]);
-
 
     Route::post('/books/{uuid}/favorites', [
-        FavoriteController::class,
-        'store',
+    FavoriteController::class,
+    'store',
     ]);
 
-
     Route::delete('/books/{uuid}/favorites', [
-        FavoriteController::class,
-        'destroy',
+    FavoriteController::class,
+    'destroy',
     ]);
 
 
