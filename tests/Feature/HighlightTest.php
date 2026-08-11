@@ -315,12 +315,16 @@ class HighlightTest extends TestCase
 
         Sanctum::actingAs($user);
 
-        $this->deleteJson(
+        $response = $this->deleteJson(
             "/api/books/{$book->uuid}/highlights/{$highlight->id}"
-        )->assertNoContent();
+        );
 
-        $this->assertDatabaseMissing('highlights', [
+        $response->assertNoContent();
+
+        $this->assertSoftDeleted('highlights', [
             'id' => $highlight->id,
+            'user_id' => $user->id,
+            'book_id' => $book->id,
         ]);
     }
 

@@ -12,38 +12,35 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('highlights', function (Blueprint $table) {
+            $table->id();
 
-    $table->id();
+            $table->uuid()->unique();
 
-    $table->uuid()->unique();
+            $table->foreignId('user_id')
+                ->constrained()
+                ->cascadeOnDelete();
 
-    $table->foreignId('user_id')
-        ->constrained()
-        ->cascadeOnDelete();
+            $table->foreignId('book_id')
+                ->constrained()
+                ->cascadeOnDelete();
 
-    $table->foreignId('book_id')
-        ->constrained()
-        ->cascadeOnDelete();
+            $table->unsignedInteger('current_page')->nullable();
 
-    $table->unsignedInteger('current_page')->nullable();
+            $table->string('location')->nullable();
 
-    $table->string('location')->nullable();
+            $table->text('selected_text');
 
-    $table->text('selected_text');
+            $table->text('note')->nullable();
 
-    $table->text('note')->nullable();
+            $table->string('color', 30)->default('yellow');
 
-    $table->string('color', 30)->default('yellow');
+            $table->timestamps();
 
-    $table->timestamps();
+            $table->softDeletes();
 
-    $table->softDeletes();
-
-    $table->index(['user_id', 'book_id']);
-
-    $table->index(['book_id', 'current_page']);
-    });
-    
+            $table->index(['user_id', 'book_id']);
+            $table->index(['book_id', 'current_page']);
+        });
     }
 
     /**

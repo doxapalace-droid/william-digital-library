@@ -18,8 +18,10 @@ class HighlightController extends Controller
     /**
      * Display the authenticated user's highlights for a book.
      */
-    public function index(Request $request, string $uuid): HighlightCollection
-    {
+    public function index(
+        Request $request,
+        string $uuid
+    ): HighlightCollection {
         $book = $this->findAccessibleBook($request, $uuid);
 
         $highlights = Highlight::query()
@@ -63,12 +65,14 @@ class HighlightController extends Controller
     ): JsonResponse {
         $book = $this->findAccessibleBook($request, $uuid);
 
-        $this->ensureHighlightBelongsToBook($highlight, $book);
+        $this->ensureHighlightBelongsToBook(
+            $highlight,
+            $book
+        );
 
-        abort_unless(
-            $highlight->user_id === $request->user()->id,
-            Response::HTTP_FORBIDDEN,
-            'Unauthorized.'
+        $this->ensureHighlightBelongsToUser(
+            $request,
+            $highlight
         );
 
         $highlight->update($request->validated());
@@ -91,12 +95,14 @@ class HighlightController extends Controller
     ): Response {
         $book = $this->findAccessibleBook($request, $uuid);
 
-        $this->ensureHighlightBelongsToBook($highlight, $book);
+        $this->ensureHighlightBelongsToBook(
+            $highlight,
+            $book
+        );
 
-        abort_unless(
-            $highlight->user_id === $request->user()->id,
-            Response::HTTP_FORBIDDEN,
-            'Unauthorized.'
+        $this->ensureHighlightBelongsToUser(
+            $request,
+            $highlight
         );
 
         $highlight->delete();
@@ -120,7 +126,8 @@ class HighlightController extends Controller
         $hasAccess = $book->entitlements()
             ->where('user_id', $request->user()->id)
             ->where(function ($query) {
-                $query->whereNull('expires_at')
+                $query
+                    ->whereNull('expires_at')
                     ->orWhere('expires_at', '>', now());
             })
             ->exists();
@@ -145,6 +152,20 @@ class HighlightController extends Controller
             $highlight->book_id === $book->id,
             Response::HTTP_NOT_FOUND,
             'Highlight not found.'
+        );
+    }
+
+    /**
+     * Ensure the highlight belongs to the authenticated user.
+     */
+    private function ensureHighlightBelongsToUser(
+        Request $request,
+        Highlight $highlight
+    ): void {
+        abort_unless(
+            $highlight->user_id === $request->user()->id,
+            Response::HTTP_FORBIDDEN,
+            'You do not have permission to modify this highlight.'
         );
     }
 }
