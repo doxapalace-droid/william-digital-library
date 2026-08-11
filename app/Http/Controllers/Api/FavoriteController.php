@@ -4,26 +4,22 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Book;
-use App\Models\BookEntitlement;
 use App\Models\Favorite;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 
 class FavoriteController extends Controller
 {
     /**
-     * Check whether the authenticated user
-     * has favorited this book.
+     * Display whether the authenticated user's favorite
+     * exists for the requested book.
      */
-    public function show(Request $request, string $uuid): JsonResponse
-    {
-        $book = $this->findBook($uuid);
-
-        if (! $this->hasAccess($request, $book)) {
-            return response()->json([
-                'message' => 'You do not have access to this book.',
-            ], 403);
-        }
+    public function show(
+        Request $request,
+        string $uuid
+    ): JsonResponse {
+        $book = $this->findAccessibleBook($request, $uuid);
 
         $isFavorite = Favorite::query()
             ->where('user_id', $request->user()->id)
@@ -38,77 +34,71 @@ class FavoriteController extends Controller
     }
 
     /**
-     * Add the book to the authenticated
-     * user's favorites.
+     * Add the requested book to the authenticated user's favorites.
      */
-    public function store(Request $request, string $uuid): JsonResponse
-    {
-        $book = $this->findBook($uuid);
+    public function store(
+        Request $request,
+        string $uuid
+    ): JsonResponse {
+        $book = $this->findAccessibleBook($request, $uuid);
 
-        if (! $this->hasAccess($request, $book)) {
+        $favorite = Favorite::query()
+            ->where('user_id', $request->user()->id)
+            ->where('book_id', $book->id)
+            ->first();
+
+        if ($favorite) {
             return response()->json([
-                'message' => 'You do not have access to this book.',
-            ], 403);
+                'data' => [
+                    'is_favorite' => true,
+                ],
+            ]);
         }
 
-        $favorite = Favorite::firstOrCreate([
+        Favorite::create([
             'user_id' => $request->user()->id,
             'book_id' => $book->id,
         ]);
 
         return response()->json([
             'data' => [
-                'id' => $favorite->id,
-                'book_id' => $favorite->book_id,
                 'is_favorite' => true,
             ],
-        ], $favorite->wasRecentlyCreated ? 201 : 200);
+        ], Response::HTTP_CREATED);
     }
 
     /**
-     * Remove the book from the authenticated
-     * user's favorites.
+     * Remove the requested book from the authenticated user's favorites.
      */
-    public function destroy(Request $request, string $uuid): JsonResponse
-    {
-        $book = $this->findBook($uuid);
-
-        if (! $this->hasAccess($request, $book)) {
-            return response()->json([
-                'message' => 'You do not have access to this book.',
-            ], 403);
-        }
+    public function destroy(
+        Request $request,
+        string $uuid
+    ): Response {
+        $book = $this->findAccessibleBook($request, $uuid);
 
         Favorite::query()
             ->where('user_id', $request->user()->id)
             ->where('book_id', $book->id)
+            ->firstOrFail()
             ->delete();
 
-        return response()->json([
-            'data' => [
-                'is_favorite' => false,
-            ],
-        ]);
+        return response()->noContent();
     }
 
     /**
-     * Find a book by UUID.
+     * Find a published book the authenticated user is entitled to access.
      */
-    private function findBook(string $uuid): Book
-    {
-        return Book::query()
+    private function findAccessibleBook(
+        Request $request,
+        string $uuid
+    ): Book {
+        $book = Book::query()
             ->where('uuid', $uuid)
+            ->where('is_published', true)
             ->firstOrFail();
-    }
 
-    /**
-     * Determine whether the authenticated user
-     * currently has access to the book.
-     */
-    private function hasAccess(Request $request, Book $book): bool
-    {
-        return BookEntitlement::query()
-            ->where('user_id', $request->user()->id)
+        $hasAccess = $request->user()
+            ->bookEntitlements()
             ->where('book_id', $book->id)
             ->where(function ($query) {
                 $query
@@ -116,5 +106,13 @@ class FavoriteController extends Controller
                     ->orWhere('expires_at', '>', now());
             })
             ->exists();
+
+        abort_unless(
+            $hasAccess,
+            Response::HTTP_FORBIDDEN,
+            'You do not have access to this book.'
+        );
+
+        return $book;
     }
 }
