@@ -88,7 +88,7 @@ class Book extends Model
     }
 
     /**
-     * Reading notes created for this book.
+     * Reading notes created by customers for this book.
      */
     public function readingNotes(): HasMany
     {
@@ -101,6 +101,14 @@ class Book extends Model
     public function favorites(): HasMany
     {
         return $this->hasMany(Favorite::class);
+    }
+
+    /**
+     * Reviews submitted for this book.
+     */
+    public function reviews(): HasMany
+    {
+        return $this->hasMany(Review::class);
     }
 
     /**

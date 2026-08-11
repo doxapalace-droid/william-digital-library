@@ -1,51 +1,63 @@
 <?php
 
-use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
+namespace App\Models;
 
-return new class extends Migration
+use App\Traits\HasUuid;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class Review extends Model
 {
+    use HasFactory;
+    use HasUuid;
+    use SoftDeletes;
+
     /**
-     * Run the migrations.
+     * Attributes that may be mass assigned.
      */
-    public function up(): void
+    protected $fillable = [
+        'user_id',
+        'book_id',
+        'rating',
+        'review',
+    ];
+
+    /**
+     * Attribute casting.
+     */
+    protected function casts(): array
     {
-        Schema::create('reviews', function (Blueprint $table) {
-
-            $table->id();
-
-            $table->uuid()->unique();
-
-            $table->foreignId('user_id')
-                ->constrained()
-                ->cascadeOnDelete();
-
-            $table->foreignId('book_id')
-                ->constrained()
-                ->cascadeOnDelete();
-
-            $table->unsignedTinyInteger('rating');
-
-            $table->text('review')->nullable();
-
-            $table->timestamps();
-
-            $table->softDeletes();
-
-            // One review per customer per book.
-            $table->unique([
-                'user_id',
-                'book_id',
-            ]);
-        });
+        return [
+            'rating' => 'integer',
+        ];
     }
 
     /**
-     * Reverse the migrations.
+     * Reviewer.
      */
-    public function down(): void
+    public function user(): BelongsTo
     {
-        Schema::dropIfExists('reviews');
+        return $this->belongsTo(User::class);
     }
-};
+
+    /**
+     * Reviewed book.
+     */
+    public function book(): BelongsTo
+    {
+        return $this->belongsTo(Book::class);
+    }
+
+    /**
+     * Scope reviews with a specific rating.
+     */
+    public function scopeWithRating(
+        Builder $query,
+        int $rating
+    ): Builder {
+        return $query->where('rating', $rating);
+    }
+}

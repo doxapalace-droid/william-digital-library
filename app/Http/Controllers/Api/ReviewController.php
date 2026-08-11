@@ -9,6 +9,7 @@ use App\Http\Resources\ReviewCollection;
 use App\Http\Resources\ReviewResource;
 use App\Models\Book;
 use App\Models\Review;
+use App\Services\BookRatingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -24,13 +25,27 @@ class ReviewController extends Controller
     ): ReviewCollection {
         $book = $this->findAccessibleBook($request, $uuid);
 
-        $reviews = Review::query()
-            ->where('book_id', $book->id)
+        $reviews = $book->reviews()
             ->with('user:id,name')
             ->latest()
             ->get();
 
         return new ReviewCollection($reviews);
+    }
+
+    /**
+     * Display rating statistics for an accessible published book.
+     */
+    public function statistics(
+        Request $request,
+        string $uuid,
+        BookRatingService $ratingService
+    ): JsonResponse {
+        $book = $this->findAccessibleBook($request, $uuid);
+
+        return response()->json([
+            'data' => $ratingService->statistics($book),
+        ]);
     }
 
     /**
@@ -64,9 +79,14 @@ class ReviewController extends Controller
             ...$request->validated(),
         ]);
 
+        /*
+         * Load the reviewer for the API response.
+         */
+        $review->load('user:id,name');
+
         return response()->json([
             'message' => 'Review submitted successfully.',
-            'data' => new ReviewResource($review->fresh()),
+            'data' => new ReviewResource($review),
         ], Response::HTTP_CREATED);
     }
 
@@ -90,9 +110,14 @@ class ReviewController extends Controller
 
         $review->update($request->validated());
 
+        /*
+         * Load the reviewer for the API response.
+         */
+        $review->load('user:id,name');
+
         return response()->json([
             'message' => 'Review updated successfully.',
-            'data' => new ReviewResource($review->fresh()),
+            'data' => new ReviewResource($review),
         ]);
     }
 

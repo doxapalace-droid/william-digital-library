@@ -187,54 +187,93 @@ Route::middleware([
         CategoryController::class,
         'destroy',
     ]);
-    });
+});
+
+
+/*
+|--------------------------------------------------------------------------
+| Authenticated User / Customer Routes
+|--------------------------------------------------------------------------
+|
+| Every route in this group requires a valid Sanctum-authenticated user.
+| Individual controllers remain responsible for verifying ownership,
+| entitlement, and access to book-specific resources.
+|
+*/
+
+Route::middleware('auth:sanctum')->group(function () {
 
 
     /*
-        |--------------------------------------------------------------------------
-    | Authenticated User / Customer Routes
+    |--------------------------------------------------------------------------
+    | Reviews & Automatic Rating Statistics
     |--------------------------------------------------------------------------
     |
-    | Every route in this group requires a valid Sanctum-authenticated user.
-    | Individual controllers remain responsible for verifying ownership,
-    | entitlement, and access to book-specific resources.
+    | Customers can view, create, update, and delete reviews for books
+    | they are entitled to access.
+    |
+    | Rating statistics are automatically maintained by ReviewObserver
+    | and BookRatingService.
     |
     */
 
-    Route::middleware('auth:sanctum')->group(function () {
 
     /*
-    |--------------------------------------------------------------------------
-    | Reviews
-    |--------------------------------------------------------------------------
+    | Get all reviews for a book.
     */
-
-    Route::middleware('auth:sanctum')->group(function () {
     Route::get('/books/{uuid}/reviews', [
         ReviewController::class,
         'index',
     ]);
 
+
+    /*
+    | Get automatic rating statistics for a book.
+    |
+    | IMPORTANT:
+    | This route is placed before /reviews/{review} routes so that
+    | "statistics" is treated as a fixed route segment.
+    */
+    Route::get('/books/{uuid}/reviews/statistics', [
+        ReviewController::class,
+        'statistics',
+    ]);
+
+
+    /*
+    | Submit a new review.
+    */
     Route::post('/books/{uuid}/reviews', [
         ReviewController::class,
         'store',
     ]);
 
+
+    /*
+    | Update an existing review.
+    */
     Route::put('/books/{uuid}/reviews/{review}', [
         ReviewController::class,
         'update',
     ]);
 
+
+    /*
+    | Partially update an existing review.
+    */
     Route::patch('/books/{uuid}/reviews/{review}', [
         ReviewController::class,
         'update',
     ]);
 
+
+    /*
+    | Delete an existing review.
+    */
     Route::delete('/books/{uuid}/reviews/{review}', [
         ReviewController::class,
         'destroy',
     ]);
-    });
 
 
     /*
@@ -251,30 +290,51 @@ Route::middleware([
     });
 
 
-            Route::get('/recently-viewed', [
-    RecentlyViewedController::class,
-    'index',
+    /*
+    |--------------------------------------------------------------------------
+    | Recently Viewed
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get('/recently-viewed', [
+        RecentlyViewedController::class,
+        'index',
     ]);
 
 
-     // other routes...
+    /*
+    |--------------------------------------------------------------------------
+    | Recommendations
+    |--------------------------------------------------------------------------
+    */
 
-        Route::get('/recommendations', [RecommendationController::class, 'index']);
-         /*
+    Route::get('/recommendations', [
+        RecommendationController::class,
+        'index',
+    ]);
+
+
+    /*
     |--------------------------------------------------------------------------
     | My Recently Viewed Books
     |--------------------------------------------------------------------------
     |
-    | Returns only books the authenticated user is currently entitled
+    | Returns books the authenticated user is currently entitled
     | to access.
     |
     */
+
     Route::post('/books/{uuid}/recently-viewed', [
-    RecentlyViewedController::class,
-    'store',
+        RecentlyViewedController::class,
+        'store',
     ]);
 
-   
+
+    /*
+    |--------------------------------------------------------------------------
+    | My Library
+    |--------------------------------------------------------------------------
+    */
 
     Route::get('/my-library', [
         MyLibraryController::class,
@@ -287,7 +347,7 @@ Route::middleware([
     | Continue Reading
     |--------------------------------------------------------------------------
     |
-    | Returns books the authenticated user has started reading.
+    | Returns books the user has started reading.
     | Books should be ordered by the user's most recent reading activity.
     |
     */
@@ -299,31 +359,34 @@ Route::middleware([
 
 
     /*
-|--------------------------------------------------------------------------
-| Reader Preferences
-|--------------------------------------------------------------------------
-|
-| Authenticated users can retrieve, create, and update their personal
-| reader appearance and layout preferences.
-|
-| Each preference record belongs exclusively to the authenticated user.
-|
-*/
+    |--------------------------------------------------------------------------
+    | Reader Preferences
+    |--------------------------------------------------------------------------
+    |
+    | Authenticated users can retrieve, create, and update their personal
+    | reader appearance and layout preferences.
+    |
+    | Each preference record belongs exclusively to the authenticated user.
+    |
+    */
 
-Route::get('/reader-preferences', [
-    ReaderPreferenceController::class,
-    'show',
-]);
+    Route::get('/reader-preferences', [
+        ReaderPreferenceController::class,
+        'show',
+    ]);
 
-Route::post('/reader-preferences', [
-    ReaderPreferenceController::class,
-    'store',
-]);
 
-Route::put('/reader-preferences', [
-    ReaderPreferenceController::class,
-    'update',
-]);
+    Route::post('/reader-preferences', [
+        ReaderPreferenceController::class,
+        'store',
+    ]);
+
+
+    Route::put('/reader-preferences', [
+        ReaderPreferenceController::class,
+        'update',
+    ]);
+
 
     /*
     |--------------------------------------------------------------------------
@@ -369,7 +432,7 @@ Route::put('/reader-preferences', [
     | Customers may retrieve and update their reading position.
     |
     | ReadingProgressController additionally verifies that the customer
-    | has a valid entitlement to the requested book.
+    | has a valid entitlement for the requested book.
     |
     */
 
@@ -384,43 +447,41 @@ Route::put('/reader-preferences', [
         'update',
     ]);
 
+
     /*
-            |--------------------------------------------------------------------------
-|    Favorites  
+    |--------------------------------------------------------------------------
+    | Favorites
     |--------------------------------------------------------------------------
     |
     | Favorites allow customers to mark entitled books for quick access.
     |
     | GET:
-    | Determines whether the requested book is currently favorited by
-    | the authenticated customer.
+    | Determines whether the requested book is currently favorited.
     |
     | POST:
     | Adds the requested book to the authenticated customer's favorites.
-    | The controller should prevent duplicate favorite records.
     |
     | DELETE:
     | Removes the requested book from the authenticated customer's
     | favorites.
     |
-    | FavoriteController must verify that the authenticated customer
-    | currently has access to the requested book.
-    |
     */
 
     Route::get('/books/{uuid}/favorites', [
-    FavoriteController::class,
-    'show',
+        FavoriteController::class,
+        'show',
     ]);
+
 
     Route::post('/books/{uuid}/favorites', [
-    FavoriteController::class,
-    'store',
+        FavoriteController::class,
+        'store',
     ]);
 
+
     Route::delete('/books/{uuid}/favorites', [
-    FavoriteController::class,
-    'destroy',
+        FavoriteController::class,
+        'destroy',
     ]);
 
 
@@ -431,9 +492,6 @@ Route::put('/reader-preferences', [
     |
     | Authenticated customers can create, view, and remove bookmarks
     | for books they are currently entitled to read.
-    |
-    | BookmarkController must verify both entitlement and ownership
-    | before modifying a bookmark.
     |
     */
 
@@ -462,9 +520,6 @@ Route::put('/reader-preferences', [
     |
     | Authenticated customers can create, view, update, and remove
     | highlights for books they are currently entitled to read.
-    |
-    | HighlightController must ensure that users cannot access or modify
-    | another customer's highlights.
     |
     */
 
@@ -500,9 +555,6 @@ Route::put('/reader-preferences', [
     | Authenticated customers can create, view, update, and remove
     | personal reading notes for books they are entitled to read.
     |
-    | ReadingNoteController must ensure that notes remain private to
-    | the authenticated customer.
-    |
     */
 
     Route::get('/books/{uuid}/notes', [
@@ -527,8 +579,4 @@ Route::put('/reader-preferences', [
         ReadingNoteController::class,
         'destroy',
     ]);
-
-
-
-    
 });

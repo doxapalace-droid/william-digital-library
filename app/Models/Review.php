@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Traits\HasUuid;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -14,6 +15,9 @@ class Review extends Model
     use HasUuid;
     use SoftDeletes;
 
+    /**
+     * Attributes that may be mass assigned.
+     */
     protected $fillable = [
         'user_id',
         'book_id',
@@ -21,6 +25,9 @@ class Review extends Model
         'review',
     ];
 
+    /**
+     * Attribute casting.
+     */
     protected function casts(): array
     {
         return [
@@ -42,5 +49,15 @@ class Review extends Model
     public function book(): BelongsTo
     {
         return $this->belongsTo(Book::class);
+    }
+
+    /**
+     * Scope reviews with a specific rating.
+     */
+    public function scopeWithRating(
+        Builder $query,
+        int $rating
+    ): Builder {
+        return $query->where('rating', $rating);
     }
 }
