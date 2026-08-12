@@ -73,6 +73,13 @@ class Order extends Model
         return $this->status === 'completed';
     }
 
+    public function payments(): HasMany
+    {
+    return $this->hasMany(Payment::class);
+    }
+
+    
+
     /**
      * Determine whether the order can still be paid.
      */

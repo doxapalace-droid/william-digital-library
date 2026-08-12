@@ -150,5 +150,10 @@ class User extends Authenticatable
     }
 
 
+    public function payments(): HasMany
+    {
+    return $this->hasMany(Payment::class);
+    }
+
     
 }

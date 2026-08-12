@@ -1,6 +1,7 @@
 <?php
 
-
+use App\Http\Controllers\Api\PaymentController;
+use App\Http\Controllers\Api\CheckoutController;
 use App\Http\Controllers\Api\CartController;
 use App\Http\Controllers\Api\ReviewController;
 use App\Http\Controllers\Api\RecommendationController;
@@ -226,43 +227,78 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/books/{uuid}/reviews', [
         ReviewController::class,
         'index',
-    ]);
-
+     ]);
 
 
         /*
-    |--------------------------------------------------------------------------
-    | Customer Cart
-    |--------------------------------------------------------------------------
-    */
+        | Get all payments for an order.
+        */
 
-    Route::get('/cart', [CartController::class, 'index']);
+       Route::get('/orders/{uuid}/payments', [
+        PaymentController::class,
+        'index',
+        ]);
 
-    Route::post('/cart', [CartController::class, 'store']);
+        Route::post('/payments', [
+        PaymentController::class,
+        'store',
+        ]);
 
-    Route::delete('/cart/{uuid}', [CartController::class, 'destroy']);
+        Route::get('/payments/{uuid}', [
+        PaymentController::class,
+        'show',
+        ]);
+
+        Route::post('/payments/{uuid}/verify', [
+        PaymentController::class,
+        'verify',
+     ]);
 
 
-    /*
-    | Get automatic rating statistics for a book.
-    |
-    | IMPORTANT:
-    | This route is placed before /reviews/{review} routes so that
-    | "statistics" is treated as a fixed route segment.
-    */
-    Route::get('/books/{uuid}/reviews/statistics', [
+        /*
+        |--------------------------------------------------------------------------
+     | Customer Cart
+        |--------------------------------------------------------------------------
+        */
+
+        Route::get('/cart', [CartController::class, 'index']);
+
+     Route::post('/cart', [CartController::class, 'store']);
+
+     Route::delete('/cart/{uuid}', [CartController::class, 'destroy']);
+
+         /*
+     |--------------------------------------------------------------------------
+     | Customer Checkout
+     |   --------------------------------------------------------------------------
+      */
+
+        Route::get('/checkout', [CheckoutController::class, 'index']);
+        Route::post('/checkout', [CheckoutController::class, 'store']);
+
+        
+    
+
+        /*
+     | Get automatic rating statistics for a book.
+     |
+     | IMPORTANT:
+        | This route is placed before /reviews/{review} routes so that
+        | "statistics" is treated as a fixed route segment.
+     */
+     Route::get('/books/{uuid}/reviews/statistics', [
         ReviewController::class,
         'statistics',
-    ]);
+     ]);
 
 
-    /*
-    | Submit a new review.
-    */
-    Route::post('/books/{uuid}/reviews', [
+     /*
+     | Submit a new review.
+     */
+     Route::post('/books/{uuid}/reviews', [
         ReviewController::class,
         'store',
-    ]);
+     ]);
 
 
     /*
