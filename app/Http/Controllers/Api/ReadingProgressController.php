@@ -7,6 +7,7 @@ use App\Models\Book;
 use App\Models\ReadingProgress;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 
 class ReadingProgressController extends Controller
 {
@@ -14,8 +15,10 @@ class ReadingProgressController extends Controller
      * Return the authenticated user's reading progress
      * for a book they are entitled to read.
      */
-    public function show(Request $request, string $uuid): JsonResponse
-    {
+    public function show(
+        Request $request,
+        string $uuid
+    ): JsonResponse {
         $book = $this->findAccessibleBook($request, $uuid);
 
         $progress = ReadingProgress::query()
@@ -24,12 +27,14 @@ class ReadingProgressController extends Controller
             ->first();
 
         return response()->json([
-            'data' => $progress ? [
-                'current_page' => $progress->current_page,
-                'total_pages' => $progress->total_pages,
-                'progress_percentage' => $progress->progress_percentage,
-                'last_read_at' => $progress->last_read_at,
-            ] : null,
+            'data' => $progress
+                ? [
+                    'current_page' => $progress->current_page,
+                    'total_pages' => $progress->total_pages,
+                    'progress_percentage' => $progress->progress_percentage,
+                    'last_read_at' => $progress->last_read_at,
+                ]
+                : null,
         ]);
     }
 
@@ -37,14 +42,31 @@ class ReadingProgressController extends Controller
      * Create or update the authenticated user's
      * reading progress for a book.
      */
-    public function update(Request $request, string $uuid): JsonResponse
-    {
+    public function update(
+        Request $request,
+        string $uuid
+    ): JsonResponse {
         $book = $this->findAccessibleBook($request, $uuid);
 
         $validated = $request->validate([
-            'current_page' => ['required', 'integer', 'min:1'],
-            'total_pages' => ['required', 'integer', 'min:1'],
-            'progress_percentage' => ['required', 'numeric', 'min:0', 'max:100'],
+            'current_page' => [
+                'required',
+                'integer',
+                'min:1',
+            ],
+
+            'total_pages' => [
+                'required',
+                'integer',
+                'min:1',
+            ],
+
+            'progress_percentage' => [
+                'required',
+                'numeric',
+                'min:0',
+                'max:100',
+            ],
         ]);
 
         /*
@@ -59,7 +81,7 @@ class ReadingProgressController extends Controller
                         'The current page may not exceed the total pages.',
                     ],
                 ],
-            ], 422);
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         $progress = ReadingProgress::updateOrCreate(
@@ -89,8 +111,10 @@ class ReadingProgressController extends Controller
      * Find a published book that the authenticated
      * user currently has permission to read.
      */
-    private function findAccessibleBook(Request $request, string $uuid): Book
-    {
+    private function findAccessibleBook(
+        Request $request,
+        string $uuid
+    ): Book {
         $book = Book::query()
             ->where('uuid', $uuid)
             ->where('is_published', true)
@@ -98,6 +122,9 @@ class ReadingProgressController extends Controller
 
         $hasEntitlement = $book->entitlements()
             ->where('user_id', $request->user()->id)
+            ->where('status', 'active')
+            ->where('can_read', true)
+            ->whereNull('revoked_at')
             ->where(function ($query) {
                 $query
                     ->whereNull('expires_at')
@@ -105,7 +132,11 @@ class ReadingProgressController extends Controller
             })
             ->exists();
 
-        abort_unless($hasEntitlement, 403);
+        abort_unless(
+            $hasEntitlement,
+            Response::HTTP_FORBIDDEN,
+            'You do not have access to this book.'
+        );
 
         return $book;
     }
