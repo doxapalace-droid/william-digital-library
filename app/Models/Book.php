@@ -111,6 +111,24 @@ class Book extends Model
         return $this->hasMany(Review::class);
     }
 
+
+    /**
+ * Order items containing this book.
+ */
+    public function orderItems(): HasMany
+    {
+    return $this->hasMany(OrderItem::class);
+    }
+
+    /**
+     * Cart items containing this book.
+    */
+    public function cartItems(): HasMany
+    {
+    return $this->hasMany(CartItem::class);
+    }
+
+    
     /**
      * Get the attributes that should be cast.
      */

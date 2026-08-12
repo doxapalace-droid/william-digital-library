@@ -1,5 +1,7 @@
 <?php
 
+
+use App\Http\Controllers\Api\CartController;
 use App\Http\Controllers\Api\ReviewController;
 use App\Http\Controllers\Api\RecommendationController;
 use App\Http\Controllers\Api\RecentlyViewedController;
@@ -225,6 +227,20 @@ Route::middleware('auth:sanctum')->group(function () {
         ReviewController::class,
         'index',
     ]);
+
+
+
+        /*
+    |--------------------------------------------------------------------------
+    | Customer Cart
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get('/cart', [CartController::class, 'index']);
+
+    Route::post('/cart', [CartController::class, 'store']);
+
+    Route::delete('/cart/{uuid}', [CartController::class, 'destroy']);
 
 
     /*

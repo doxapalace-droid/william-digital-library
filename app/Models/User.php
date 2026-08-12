@@ -70,11 +70,11 @@ class User extends Authenticatable
     }
 
     /**
- * Reading progress records belonging to this user.
- *
- * Each record tracks the user's current position
- * and progress in a particular book.
- */
+    * Reading progress records belonging to this user.
+    *
+    * Each record tracks the user's current position
+    * and progress in a particular book.
+    */
     public function readingProgress(): HasMany
     {
     return $this->hasMany(ReadingProgress::class);
@@ -82,8 +82,8 @@ class User extends Authenticatable
 
 
         /**
- * Bookmarks created by this customer.
- */
+    * Bookmarks created by this customer.
+    */
     public function bookmarks(): HasMany
     {
     return $this->hasMany(Bookmark::class);
@@ -91,16 +91,16 @@ class User extends Authenticatable
 
 
         /**
- * Highlights created by this user.
- */
+    * Highlights created by this user.
+    */
     public function highlights(): HasMany
     {
     return $this->hasMany(Highlight::class);
     }
         
     /**
- * Reading notes created by this user.
- */
+    * Reading notes created by this user.
+    */
     public function readingNotes(): HasMany 
     {
     return $this->hasMany(ReadingNote::class);
@@ -108,8 +108,8 @@ class User extends Authenticatable
 
 
     /**
- * The reader preferences belonging to this user.
- */
+    * The reader preferences belonging to this user.
+    */
     public function readerPreference(): HasOne
     {
     return $this->hasOne(ReaderPreference::class);
@@ -117,19 +117,38 @@ class User extends Authenticatable
 
 
     /**
- * Books favorited by this user.
- */
+     * Books favorited by this user.
+    */
     public function favorites(): HasMany
     {
     return $this->hasMany(Favorite::class);
     }
 
     /**
- * Recently viewed books by this user.
- */
+    * Recently viewed books by this user.
+    */
     public function recentlyViewed(): HasMany
     {
         return $this->hasMany(RecentlyViewed::class);
     }
 
+    /**
+    * Orders placed by the customer.
+    */
+    public function orders(): HasMany
+    {
+    return $this->hasMany(Order::class);
+    }
+
+
+    /**
+    * Items currently in the customer's cart.
+    */
+    public function cartItems(): HasMany
+    {
+    return $this->hasMany(CartItem::class);
+    }
+
+
+    
 }
