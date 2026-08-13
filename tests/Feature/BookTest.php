@@ -11,6 +11,12 @@ class BookTest extends TestCase
 {
     use RefreshDatabase;
 
+    /*
+    |--------------------------------------------------------------------------
+    | Basic Book Tests
+    |--------------------------------------------------------------------------
+    */
+
     public function test_book_can_be_created(): void
     {
         $book = Book::create([
@@ -182,6 +188,8 @@ class BookTest extends TestCase
 
         $book->authors()->attach($author->id);
 
+        $book->load('authors');
+
         $this->assertTrue(
             $book->authors->contains($author)
         );
@@ -226,6 +234,8 @@ class BookTest extends TestCase
             $bookTwo->id,
         ]);
 
+        $author->load('books');
+
         $this->assertCount(2, $author->books);
 
         $this->assertTrue(
@@ -268,6 +278,8 @@ class BookTest extends TestCase
             $authorTwo->id,
         ]);
 
+        $book->load('authors');
+
         $this->assertCount(2, $book->authors);
 
         $this->assertTrue(
@@ -305,9 +317,11 @@ class BookTest extends TestCase
             'published_at' => now(),
         ]);
 
-        $book->authors()->attach($authorOne);
+        $book->authors()->attach($authorOne->id);
 
-        $book->authors()->sync([$authorTwo->id]);
+        $book->authors()->sync([
+            $authorTwo->id,
+        ]);
 
         $book->load('authors');
 
@@ -334,6 +348,7 @@ class BookTest extends TestCase
         $book = Book::create([
             'title' => 'Born to Rule',
             'slug' => 'born-to-rule',
+            'description' => 'A book about dominion.',
             'author' => 'William K. Danquah',
             'price' => 6.99,
             'currency' => 'USD',
@@ -341,9 +356,9 @@ class BookTest extends TestCase
             'published_at' => now(),
         ]);
 
-        $book->authors()->attach($author);
+        $book->authors()->attach($author->id);
 
-        $book->authors()->detach($author);
+        $book->authors()->detach($author->id);
 
         $this->assertDatabaseMissing('author_book', [
             'author_id' => $author->id,

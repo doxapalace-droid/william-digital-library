@@ -15,152 +15,241 @@ use Illuminate\Validation\Rule;
 class BookController extends Controller
 {
     /**
-     * Display a listing of published books.
-     */
+ * Display a paginated listing of published books.
+ */
     public function index(Request $request): JsonResponse
     {
-        /*
-        |--------------------------------------------------------------------------
-        | Validate catalogue filters
-        |--------------------------------------------------------------------------
-        */
+    /*
+    |--------------------------------------------------------------------------
+    | Validate catalogue filters
+    |--------------------------------------------------------------------------
+    */
 
-        $validated = $request->validate([
-            'search' => [
-                'nullable',
-                'string',
-                'max:255',
-            ],
+    $validated = $request->validate([
+        'search' => [
+            'nullable',
+            'string',
+            'max:255',
+        ],
 
-            'category' => [
-                'nullable',
-                'string',
-                'max:255',
-            ],
+        'category' => [
+            'nullable',
+            'string',
+            'max:255',
+        ],
 
-            'featured' => [
-                'nullable',
-                'boolean',
-            ],
+        'author' => [
+            'nullable',
+            'string',
+            'max:255',
+        ],
 
-            'sort' => [
-                'nullable',
-                Rule::in([
-                    'newest',
-                    'oldest',
-                    'title_asc',
-                    'title_desc',
-                    'price_asc',
-                    'price_desc',
-                ]),
-            ],
-        ]);
+        'featured' => [
+            'nullable',
+            'boolean',
+        ],
 
-        /*
-        |--------------------------------------------------------------------------
-        | Build public catalogue query
-        |--------------------------------------------------------------------------
-        */
+        'sort' => [
+            'nullable',
+            Rule::in([
+                'newest',
+                'oldest',
+                'title_asc',
+                'title_desc',
+                'price_asc',
+                'price_desc',
+            ]),
+        ],
 
-        $books = Book::query()
-            ->with([
-                'authors:id,uuid,name,slug',
-                'categories:id,uuid,name,slug',
-            ])
-            ->where('is_published', true)
+        'per_page' => [
+            'nullable',
+            'integer',
+            'min:1',
+            'max:50',
+        ],
+    ]);
 
-            /*
-            |--------------------------------------------------------------------------
-            | Search
-            |--------------------------------------------------------------------------
-            |
-            | Searches:
-            | - title
-            | - subtitle
-            | - legacy author field
-            | - related authors
-            | - description
-            |
-            */
+    /*
+    |--------------------------------------------------------------------------
+    | Build public catalogue query
+    |--------------------------------------------------------------------------
+    */
 
-            ->when(
-                !empty($validated['search']),
-                function ($query) use ($validated) {
-                    $search = $validated['search'];
-
-                    $query->where(function ($searchQuery) use ($search) {
-                        $searchQuery
-                            ->where('title', 'like', "%{$search}%")
-                            ->orWhere('subtitle', 'like', "%{$search}%")
-                            ->orWhere('author', 'like', "%{$search}%")
-                            ->orWhere('description', 'like', "%{$search}%")
-                            ->orWhereHas(
-                                'authors',
-                                function ($authorQuery) use ($search) {
-                                    $authorQuery->where(
-                                        'authors.name',
-                                        'like',
-                                        "%{$search}%"
-                                    );
-                                }
-                            );
-                    });
-                }
-            )
-
-            /*
-            |--------------------------------------------------------------------------
-            | Category filter
-            |--------------------------------------------------------------------------
-            */
-
-            ->when(
-                !empty($validated['category']),
-                function ($query) use ($validated) {
-                    $query->whereHas(
-                        'categories',
-                        function ($categoryQuery) use ($validated) {
-                            $categoryQuery
-                                ->where('slug', $validated['category'])
-                                ->where('is_active', true);
-                        }
-                    );
-                }
-            )
-
-            /*
-            |--------------------------------------------------------------------------
-            | Featured filter
-            |--------------------------------------------------------------------------
-            */
-
-            ->when(
-                $request->boolean('featured'),
-                fn ($query) => $query->where('is_featured', true)
-            );
+    $books = Book::query()
+        ->with([
+            'authors:id,uuid,name,slug',
+            'categories:id,uuid,name,slug',
+        ])
+        ->where('is_published', true)
 
         /*
         |--------------------------------------------------------------------------
-        | Sorting
+        | Search
+        |--------------------------------------------------------------------------
+        |
+        | Searches:
+        | - title
+        | - subtitle
+        | - legacy author field
+        | - related authors
+        | - description
+        |
+        */
+
+        ->when(
+            !empty($validated['search']),
+            function ($query) use ($validated) {
+                $search = $validated['search'];
+
+                $query->where(function ($searchQuery) use ($search) {
+                    $searchQuery
+                        ->where('title', 'like', "%{$search}%")
+                        ->orWhere('subtitle', 'like', "%{$search}%")
+                        ->orWhere('author', 'like', "%{$search}%")
+                        ->orWhere('description', 'like', "%{$search}%")
+                        ->orWhereHas(
+                            'authors',
+                            function ($authorQuery) use ($search) {
+                                $authorQuery->where(
+                                    'authors.name',
+                                    'like',
+                                    "%{$search}%"
+                                );
+                            }
+                        );
+                });
+            }
+        )
+
+        /*
+        |--------------------------------------------------------------------------
+        | Category filter
+        |--------------------------------------------------------------------------
+        |
+        | Example:
+        | /api/books?category=christian-living
+        |
+        */
+
+        ->when(
+            !empty($validated['category']),
+            function ($query) use ($validated) {
+                $query->whereHas(
+                    'categories',
+                    function ($categoryQuery) use ($validated) {
+                        $categoryQuery
+                            ->where(
+                                'categories.slug',
+                                $validated['category']
+                            )
+                            ->where('categories.is_active', true);
+                    }
+                );
+            }
+        )
+
+        /*
+        |--------------------------------------------------------------------------
+        | Author filter
+        |--------------------------------------------------------------------------
+        |
+        | Example:
+        | /api/books?author=william-k-danquah
+        |
+        */
+
+        ->when(
+            !empty($validated['author']),
+            function ($query) use ($validated) {
+                $query->whereHas(
+                    'authors',
+                    function ($authorQuery) use ($validated) {
+                        $authorQuery
+                            ->where(
+                                'authors.slug',
+                                $validated['author']
+                            )
+                            ->where('authors.is_active', true);
+                    }
+                );
+            }
+        )
+
+        /*
+        |--------------------------------------------------------------------------
+        | Featured filter
         |--------------------------------------------------------------------------
         */
 
-        $sort = $validated['sort'] ?? 'newest';
+        ->when(
+            $request->boolean('featured'),
+            fn ($query) => $query->where('is_featured', true)
+        );
 
-        match ($sort) {
-            'oldest' => $books->orderBy('published_at'),
-            'title_asc' => $books->orderBy('title'),
-            'title_desc' => $books->orderByDesc('title'),
-            'price_asc' => $books->orderBy('price'),
-            'price_desc' => $books->orderByDesc('price'),
-            default => $books->orderByDesc('published_at'),
-        };
+    /*
+    |--------------------------------------------------------------------------
+    | Sorting
+    |--------------------------------------------------------------------------
+    */
 
-        $books = $books->get();
+    $sort = $validated['sort'] ?? 'newest';
 
-        return response()->json([
-            'data' => $books,
-        ]);
+    match ($sort) {
+        'oldest' => $books
+            ->orderBy('published_at')
+            ->orderBy('id'),
+
+        'title_asc' => $books
+            ->orderBy('title')
+            ->orderBy('id'),
+
+        'title_desc' => $books
+            ->orderByDesc('title')
+            ->orderBy('id'),
+
+        'price_asc' => $books
+            ->orderBy('price')
+            ->orderBy('id'),
+
+        'price_desc' => $books
+            ->orderByDesc('price')
+            ->orderBy('id'),
+
+        default => $books
+            ->orderByDesc('published_at')
+                ->orderByDesc('id'),
+     };
+
+    /*
+    |--------------------------------------------------------------------------
+    | Pagination
+    |--------------------------------------------------------------------------
+    */
+
+    $perPage = $validated['per_page'] ?? 12;
+
+    $books = $books
+        ->paginate($perPage)
+        ->withQueryString();
+
+    /*
+    |--------------------------------------------------------------------------
+    | Response
+    |--------------------------------------------------------------------------
+    */
+
+    return response()->json([
+        'data' => $books->items(),
+
+        'meta' => [
+            'current_page' => $books->currentPage(),
+            'last_page' => $books->lastPage(),
+            'per_page' => $books->perPage(),
+            'total' => $books->total(),
+            'from' => $books->firstItem(),
+            'to' => $books->lastItem(),
+        ],
+    ]);
     }
 
     /**
