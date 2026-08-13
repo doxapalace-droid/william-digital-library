@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Author;
 use App\Models\Book;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -63,6 +64,7 @@ class BookController extends Controller
 
         $books = Book::query()
             ->with([
+                'authors:id,uuid,name,slug',
                 'categories:id,uuid,name,slug',
             ])
             ->where('is_published', true)
@@ -72,15 +74,17 @@ class BookController extends Controller
             | Search
             |--------------------------------------------------------------------------
             |
-            | Searches title, subtitle, author and description.
-            |
-            | Example:
-            | /api/books?search=dominion
+            | Searches:
+            | - title
+            | - subtitle
+            | - legacy author field
+            | - related authors
+            | - description
             |
             */
 
             ->when(
-                ! empty($validated['search']),
+                !empty($validated['search']),
                 function ($query) use ($validated) {
                     $search = $validated['search'];
 
@@ -89,7 +93,17 @@ class BookController extends Controller
                             ->where('title', 'like', "%{$search}%")
                             ->orWhere('subtitle', 'like', "%{$search}%")
                             ->orWhere('author', 'like', "%{$search}%")
-                            ->orWhere('description', 'like', "%{$search}%");
+                            ->orWhere('description', 'like', "%{$search}%")
+                            ->orWhereHas(
+                                'authors',
+                                function ($authorQuery) use ($search) {
+                                    $authorQuery->where(
+                                        'authors.name',
+                                        'like',
+                                        "%{$search}%"
+                                    );
+                                }
+                            );
                     });
                 }
             )
@@ -98,16 +112,10 @@ class BookController extends Controller
             |--------------------------------------------------------------------------
             | Category filter
             |--------------------------------------------------------------------------
-            |
-            | The main catalogue uses the category slug.
-            |
-            | Example:
-            | /api/books?category=leadership
-            |
             */
 
             ->when(
-                ! empty($validated['category']),
+                !empty($validated['category']),
                 function ($query) use ($validated) {
                     $query->whereHas(
                         'categories',
@@ -124,10 +132,6 @@ class BookController extends Controller
             |--------------------------------------------------------------------------
             | Featured filter
             |--------------------------------------------------------------------------
-            |
-            | Example:
-            | /api/books?featured=1
-            |
             */
 
             ->when(
@@ -169,13 +173,6 @@ class BookController extends Controller
      *
      * category
      *     Filter by category database ID.
-     *
-     * Examples:
-     *
-     * /api/books/search?q=dominion
-     * /api/books/search?q=William
-     * /api/books/search?category=1
-     * /api/books/search?q=dominion&category=1
      */
     public function search(Request $request): JsonResponse
     {
@@ -183,10 +180,6 @@ class BookController extends Controller
         |--------------------------------------------------------------------------
         | Validate search parameters
         |--------------------------------------------------------------------------
-        |
-        | q is optional because category-only searches are supported.
-        | When q is supplied, it must contain at least two characters.
-        |
         */
 
         $validated = $request->validate([
@@ -216,13 +209,11 @@ class BookController extends Controller
         |--------------------------------------------------------------------------
         | Build search query
         |--------------------------------------------------------------------------
-        |
-        | Public search must never expose unpublished books.
-        |
         */
 
         $books = Book::query()
             ->with([
+                'authors:id,uuid,name,slug',
                 'categories:id,uuid,name,slug',
             ])
             ->where('is_published', true)
@@ -238,19 +229,26 @@ class BookController extends Controller
                 function ($query) use ($search) {
                     $normalizedSearch = mb_strtolower($search);
 
-                    $query->where(
-                        function ($searchQuery) use ($normalizedSearch) {
-                            $searchQuery
-                                ->whereRaw(
-                                    'LOWER(title) LIKE ?',
-                                    ['%' . $normalizedSearch . '%']
-                                )
-                                ->orWhereRaw(
-                                    'LOWER(author) LIKE ?',
-                                    ['%' . $normalizedSearch . '%']
-                                );
-                        }
-                    );
+                    $query->where(function ($searchQuery) use ($normalizedSearch) {
+                        $searchQuery
+                            ->whereRaw(
+                                'LOWER(title) LIKE ?',
+                                ['%' . $normalizedSearch . '%']
+                            )
+                            ->orWhereRaw(
+                                'LOWER(author) LIKE ?',
+                                ['%' . $normalizedSearch . '%']
+                            )
+                            ->orWhereHas(
+                                'authors',
+                                function ($authorQuery) use ($normalizedSearch) {
+                                    $authorQuery->whereRaw(
+                                        'LOWER(authors.name) LIKE ?',
+                                        ['%' . $normalizedSearch . '%']
+                                    );
+                                }
+                            );
+                    });
                 }
             )
 
@@ -258,9 +256,6 @@ class BookController extends Controller
             |--------------------------------------------------------------------------
             | Category filter
             |--------------------------------------------------------------------------
-            |
-            | The dedicated search endpoint uses category database IDs.
-            |
             */
 
             ->when(
@@ -297,6 +292,12 @@ class BookController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        /*
+        |--------------------------------------------------------------------------
+        | Validate book data
+        |--------------------------------------------------------------------------
+        */
+
         $validated = $request->validate([
             'title' => [
                 'required',
@@ -315,10 +316,44 @@ class BookController extends Controller
                 'string',
             ],
 
+            /*
+            |--------------------------------------------------------------------------
+            | Legacy author field
+            |--------------------------------------------------------------------------
+            |
+            | Kept for backwards compatibility.
+            |
+            */
+
             'author' => [
                 'nullable',
                 'string',
                 'max:255',
+            ],
+
+            /*
+            |--------------------------------------------------------------------------
+            | New author relationship
+            |--------------------------------------------------------------------------
+            |
+            | Example:
+            |
+            | authors[] = 1
+            | authors[] = 2
+            |
+            */
+
+            'authors' => [
+                'sometimes',
+                'array',
+            ],
+
+            'authors.*' => [
+                'integer',
+                'distinct',
+                Rule::exists('authors', 'id')->where(
+                    fn ($query) => $query->where('is_active', true)
+                ),
             ],
 
             'isbn' => [
@@ -357,14 +392,6 @@ class BookController extends Controller
             |--------------------------------------------------------------------------
             | Categories
             |--------------------------------------------------------------------------
-            |
-            | Category database IDs are expected.
-            |
-            | Example:
-            |
-            | categories[] = 1
-            | categories[] = 8
-            |
             */
 
             'categories' => [
@@ -393,13 +420,21 @@ class BookController extends Controller
 
         /*
         |--------------------------------------------------------------------------
-        | Extract category IDs
+        | Extract relationships
         |--------------------------------------------------------------------------
         */
 
         $categoryIds = $validated['categories'] ?? [];
 
+        $authorsWereProvided = array_key_exists(
+            'authors',
+            $validated
+        );
+
+        $authorIds = $validated['authors'] ?? [];
+
         unset($validated['categories']);
+        unset($validated['authors']);
 
         /*
         |--------------------------------------------------------------------------
@@ -419,6 +454,30 @@ class BookController extends Controller
 
         if ($validated['is_published'] ?? false) {
             $validated['published_at'] = now();
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Keep legacy author field synchronized
+        |--------------------------------------------------------------------------
+        |
+        | If authors are supplied through the new relationship and the
+        | legacy author field is empty, populate it automatically.
+        |
+        */
+
+        if (
+            $authorsWereProvided &&
+            !empty($authorIds) &&
+            empty($validated['author'])
+        ) {
+            $authorNames = Author::query()
+                ->whereIn('id', $authorIds)
+                ->orderBy('name')
+                ->pluck('name')
+                ->implode(', ');
+
+            $validated['author'] = $authorNames;
         }
 
         /*
@@ -448,19 +507,25 @@ class BookController extends Controller
 
         /*
         |--------------------------------------------------------------------------
-        | Create book and attach categories
+        | Create book and attach relationships
         |--------------------------------------------------------------------------
         */
 
         try {
             $book = DB::transaction(function () use (
                 $validated,
-                $categoryIds
+                $categoryIds,
+                $authorsWereProvided,
+                $authorIds
             ) {
                 $book = Book::create($validated);
 
-                if (! empty($categoryIds)) {
+                if (!empty($categoryIds)) {
                     $book->categories()->sync($categoryIds);
+                }
+
+                if ($authorsWereProvided) {
+                    $book->authors()->sync($authorIds);
                 }
 
                 return $book;
@@ -480,9 +545,10 @@ class BookController extends Controller
         return response()->json([
             'message' => 'Book created successfully.',
 
-            'data' => $book->load(
-                'categories:id,uuid,name,slug'
-            ),
+            'data' => $book->load([
+                'authors:id,uuid,name,slug',
+                'categories:id,uuid,name,slug',
+            ]),
         ], 201);
     }
 
@@ -493,6 +559,7 @@ class BookController extends Controller
     {
         $book = Book::query()
             ->with([
+                'authors:id,uuid,name,slug',
                 'categories:id,uuid,name,slug',
             ])
             ->where('slug', $slug)
@@ -514,6 +581,12 @@ class BookController extends Controller
         $book = Book::where('uuid', $uuid)
             ->firstOrFail();
 
+        /*
+        |--------------------------------------------------------------------------
+        | Validate book data
+        |--------------------------------------------------------------------------
+        */
+
         $validated = $request->validate([
             'title' => [
                 'sometimes',
@@ -533,11 +606,36 @@ class BookController extends Controller
                 'string',
             ],
 
+            /*
+            |--------------------------------------------------------------------------
+            | Legacy author field
+            |--------------------------------------------------------------------------
+            */
+
             'author' => [
                 'sometimes',
-                'required',
+                'nullable',
                 'string',
                 'max:255',
+            ],
+
+            /*
+            |--------------------------------------------------------------------------
+            | New author relationship
+            |--------------------------------------------------------------------------
+            */
+
+            'authors' => [
+                'sometimes',
+                'array',
+            ],
+
+            'authors.*' => [
+                'integer',
+                'distinct',
+                Rule::exists('authors', 'id')->where(
+                    fn ($query) => $query->where('is_active', true)
+                ),
             ],
 
             'isbn' => [
@@ -601,7 +699,7 @@ class BookController extends Controller
 
         /*
         |--------------------------------------------------------------------------
-        | Determine whether categories were supplied
+        | Determine whether relationships were supplied
         |--------------------------------------------------------------------------
         */
 
@@ -610,9 +708,16 @@ class BookController extends Controller
             $validated
         );
 
+        $authorsWereProvided = array_key_exists(
+            'authors',
+            $validated
+        );
+
         $categoryIds = $validated['categories'] ?? [];
+        $authorIds = $validated['authors'] ?? [];
 
         unset($validated['categories']);
+        unset($validated['authors']);
 
         /*
         |--------------------------------------------------------------------------
@@ -639,14 +744,34 @@ class BookController extends Controller
         if (array_key_exists('is_published', $validated)) {
             if (
                 $validated['is_published'] &&
-                ! $book->published_at
+                !$book->published_at
             ) {
                 $validated['published_at'] = now();
             }
 
-            if (! $validated['is_published']) {
+            if (!$validated['is_published']) {
                 $validated['published_at'] = null;
             }
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Synchronize legacy author field
+        |--------------------------------------------------------------------------
+        */
+
+        if (
+            $authorsWereProvided &&
+            !empty($authorIds) &&
+            empty($validated['author'])
+        ) {
+            $authorNames = Author::query()
+                ->whereIn('id', $authorIds)
+                ->orderBy('name')
+                ->pluck('name')
+                ->implode(', ');
+
+            $validated['author'] = $authorNames;
         }
 
         /*
@@ -681,7 +806,7 @@ class BookController extends Controller
 
         /*
         |--------------------------------------------------------------------------
-        | Update book and categories atomically
+        | Update book and relationships atomically
         |--------------------------------------------------------------------------
         */
 
@@ -690,20 +815,44 @@ class BookController extends Controller
                 $book,
                 $validated,
                 $categoriesWereProvided,
-                $categoryIds
+                $categoryIds,
+                $authorsWereProvided,
+                $authorIds
             ) {
                 $book->update($validated);
 
                 /*
-                | Only synchronize categories when the request actually
-                | contains the categories field.
+                |--------------------------------------------------------------------------
+                | Categories
+                |--------------------------------------------------------------------------
                 |
-                | no categories field = leave existing categories alone
-                | categories: []      = remove all categories
+                | No categories field:
+                |     Leave existing categories alone.
+                |
+                | categories: []
+                |     Remove all categories.
+                |
                 */
 
                 if ($categoriesWereProvided) {
                     $book->categories()->sync($categoryIds);
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | Authors
+                |--------------------------------------------------------------------------
+                |
+                | No authors field:
+                |     Leave existing authors alone.
+                |
+                | authors: []
+                |     Remove all authors.
+                |
+                */
+
+                if ($authorsWereProvided) {
+                    $book->authors()->sync($authorIds);
                 }
             });
         } catch (\Throwable $exception) {
@@ -740,7 +889,10 @@ class BookController extends Controller
 
             'data' => $book
                 ->fresh()
-                ->load('categories:id,uuid,name,slug'),
+                ->load([
+                    'authors:id,uuid,name,slug',
+                    'categories:id,uuid,name,slug',
+                ]),
         ]);
     }
 

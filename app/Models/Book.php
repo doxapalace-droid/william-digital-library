@@ -38,6 +38,30 @@ class Book extends Model
     ];
 
     /**
+     * Authors who wrote this book.
+     *
+     * A book may have multiple authors,
+     * and an author may write multiple books.
+     */
+    public function authors(): BelongsToMany
+    {
+        return $this->belongsToMany(Author::class)
+            ->withTimestamps();
+    }
+
+    /**
+     * Categories assigned to this book.
+     *
+     * A book may belong to multiple categories,
+     * and a category may contain multiple books.
+     */
+    public function categories(): BelongsToMany
+    {
+        return $this->belongsToMany(Category::class)
+            ->withTimestamps();
+    }
+
+    /**
      * Entitlements granted for this book.
      *
      * These determine which users are allowed to read
@@ -57,18 +81,6 @@ class Book extends Model
     public function readingProgress(): HasMany
     {
         return $this->hasMany(ReadingProgress::class);
-    }
-
-    /**
-     * Categories assigned to this book.
-     *
-     * A book may belong to multiple categories and
-     * a category may contain multiple books.
-     */
-    public function categories(): BelongsToMany
-    {
-        return $this->belongsToMany(Category::class)
-            ->withTimestamps();
     }
 
     /**
@@ -111,24 +123,22 @@ class Book extends Model
         return $this->hasMany(Review::class);
     }
 
-
     /**
- * Order items containing this book.
- */
+     * Order items containing this book.
+     */
     public function orderItems(): HasMany
     {
-    return $this->hasMany(OrderItem::class);
+        return $this->hasMany(OrderItem::class);
     }
 
     /**
      * Cart items containing this book.
-    */
+     */
     public function cartItems(): HasMany
     {
-    return $this->hasMany(CartItem::class);
+        return $this->hasMany(CartItem::class);
     }
 
-    
     /**
      * Get the attributes that should be cast.
      */

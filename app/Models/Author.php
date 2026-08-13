@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
-class Category extends Model
+class Author extends Model
 {
     use HasFactory, HasUuid;
 
@@ -17,8 +17,8 @@ class Category extends Model
     protected $fillable = [
         'name',
         'slug',
-        'description',
-        'sort_order',
+        'bio',
+        'photo',
         'is_active',
     ];
 
@@ -28,31 +28,19 @@ class Category extends Model
     protected function casts(): array
     {
         return [
-            'sort_order' => 'integer',
             'is_active' => 'boolean',
         ];
     }
 
     /**
-     * Books belonging to this category.
+     * Books written by this author.
+     *
+     * A book may have multiple authors,
+     * and an author may write multiple books.
      */
     public function books(): BelongsToMany
     {
-        return $this->belongsToMany(Book::class);
+        return $this->belongsToMany(Book::class)
+            ->withTimestamps();
     }
-
-    /**
- * Authors of this book.
- *
- * A book may have multiple authors and
- * an author may have multiple books.
- */
-    public function authors(): BelongsToMany
-    {
-    return $this->belongsToMany(Author::class)
-        ->withTimestamps();
-    }
-
-
-    
 }

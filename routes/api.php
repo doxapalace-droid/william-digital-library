@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\BookDownloadController;
 use App\Http\Controllers\Api\BookReaderController;
 use App\Http\Controllers\Api\BookmarkController;
 use App\Http\Controllers\Api\CategoryController;
+use App\Http\Controllers\Api\AuthorController;
 use App\Http\Controllers\Api\ContinueReadingController;
 use App\Http\Controllers\Api\FavoriteController;
 use App\Http\Controllers\Api\HighlightController;
@@ -28,8 +29,8 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 |
 | These routes are available without authentication.
-| Only published books and active categories should be exposed by
-| their respective controllers.
+| Only published books, active categories, and active authors should be
+| exposed by their respective controllers.
 |
 */
 
@@ -115,9 +116,28 @@ Route::get('/categories', [
     'index',
 ]);
 
-
 Route::get('/categories/{category}', [
     CategoryController::class,
+    'show',
+]);
+
+
+/*
+|--------------------------------------------------------------------------
+| Public Authors
+|--------------------------------------------------------------------------
+|
+| Returns active authors and their public details.
+|
+*/
+
+Route::get('/authors', [
+    AuthorController::class,
+    'index',
+]);
+
+Route::get('/authors/{author}', [
+    AuthorController::class,
     'show',
 ]);
 
@@ -128,7 +148,7 @@ Route::get('/categories/{category}', [
 |--------------------------------------------------------------------------
 |
 | These routes require authentication and the admin role.
-| Administrators can manage books and categories.
+| Administrators can manage books, categories, and authors.
 |
 */
 
@@ -136,7 +156,6 @@ Route::middleware([
     'auth:sanctum',
     'role:admin',
 ])->prefix('admin')->group(function () {
-
 
     /*
     |--------------------------------------------------------------------------
@@ -152,12 +171,10 @@ Route::middleware([
         'store',
     ]);
 
-
     Route::put('/books/{uuid}', [
         BookController::class,
         'update',
     ]);
-
 
     Route::delete('/books/{uuid}', [
         BookController::class,
@@ -179,15 +196,38 @@ Route::middleware([
         'store',
     ]);
 
-
     Route::put('/categories/{category}', [
         CategoryController::class,
         'update',
     ]);
 
-
     Route::delete('/categories/{category}', [
         CategoryController::class,
+        'destroy',
+    ]);
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Author Management
+    |--------------------------------------------------------------------------
+    |
+    | Administrators can create, update, and delete authors.
+    |
+    */
+
+    Route::post('/authors', [
+        AuthorController::class,
+        'store',
+    ]);
+
+    Route::put('/authors/{author}', [
+        AuthorController::class,
+        'update',
+    ]);
+
+    Route::delete('/authors/{author}', [
+        AuthorController::class,
         'destroy',
     ]);
 });
@@ -206,7 +246,6 @@ Route::middleware([
 
 Route::middleware('auth:sanctum')->group(function () {
 
-
     /*
     |--------------------------------------------------------------------------
     | Reviews & Automatic Rating Statistics
@@ -220,99 +259,126 @@ Route::middleware('auth:sanctum')->group(function () {
     |
     */
 
-
     /*
     | Get all reviews for a book.
     */
+
     Route::get('/books/{uuid}/reviews', [
         ReviewController::class,
         'index',
-     ]);
-
-
-        /*
-        | Get all payments for an order.
-        */
-
-       Route::get('/orders/{uuid}/payments', [
-        PaymentController::class,
-        'index',
-        ]);
-
-        Route::post('/payments', [
-        PaymentController::class,
-        'store',
-        ]);
-
-        Route::get('/payments/{uuid}', [
-        PaymentController::class,
-        'show',
-        ]);
-
-        Route::post('/payments/{uuid}/verify', [
-        PaymentController::class,
-        'verify',
-     ]);
-
-
-        /*
-        |--------------------------------------------------------------------------
-     | Customer Cart
-        |--------------------------------------------------------------------------
-        */
-
-        Route::get('/cart', [CartController::class, 'index']);
-
-     Route::post('/cart', [CartController::class, 'store']);
-
-     Route::delete('/cart/{uuid}', [CartController::class, 'destroy']);
-
-         /*
-     |--------------------------------------------------------------------------
-     | Customer Checkout
-     |   --------------------------------------------------------------------------
-      */
-
-        Route::get('/checkout', [CheckoutController::class, 'index']);
-        Route::post('/checkout', [CheckoutController::class, 'store']);
-
-        
-    
-
-        /*
-     | Get automatic rating statistics for a book.
-     |
-     | IMPORTANT:
-        | This route is placed before /reviews/{review} routes so that
-        | "statistics" is treated as a fixed route segment.
-     */
-     Route::get('/books/{uuid}/reviews/statistics', [
-        ReviewController::class,
-        'statistics',
-     ]);
-
-
-     /*
-     | Submit a new review.
-     */
-     Route::post('/books/{uuid}/reviews', [
-        ReviewController::class,
-        'store',
-     ]);
+    ]);
 
 
     /*
-    | Update an existing review.
+    |--------------------------------------------------------------------------
+    | Payments
+    |--------------------------------------------------------------------------
+    |
+    | Customers can view payments for their orders, create payments,
+    | and verify their payments.
+    |
     */
+
+    Route::get('/orders/{uuid}/payments', [
+        PaymentController::class,
+        'index',
+    ]);
+
+    Route::post('/payments', [
+        PaymentController::class,
+        'store',
+    ]);
+
+    Route::get('/payments/{uuid}', [
+        PaymentController::class,
+        'show',
+    ]);
+
+    Route::post('/payments/{uuid}/verify', [
+        PaymentController::class,
+        'verify',
+    ]);
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Customer Cart
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get('/cart', [
+        CartController::class,
+        'index',
+    ]);
+
+    Route::post('/cart', [
+        CartController::class,
+        'store',
+    ]);
+
+    Route::delete('/cart/{uuid}', [
+        CartController::class,
+        'destroy',
+    ]);
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Customer Checkout
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get('/checkout', [
+        CheckoutController::class,
+        'index',
+    ]);
+
+    Route::post('/checkout', [
+        CheckoutController::class,
+        'store',
+    ]);
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Review Statistics
+    |--------------------------------------------------------------------------
+    |
+    | IMPORTANT:
+    | This route is placed before /reviews/{review} routes so that
+    | "statistics" is treated as a fixed route segment.
+    |
+    */
+
+    Route::get('/books/{uuid}/reviews/statistics', [
+        ReviewController::class,
+        'statistics',
+    ]);
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Submit a New Review
+    |--------------------------------------------------------------------------
+    */
+
+    Route::post('/books/{uuid}/reviews', [
+        ReviewController::class,
+        'store',
+    ]);
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Update an Existing Review
+    |--------------------------------------------------------------------------
+    */
+
     Route::put('/books/{uuid}/reviews/{review}', [
         ReviewController::class,
         'update',
     ]);
 
-
-    /*
-    | Partially update an existing review.
-    */
     Route::patch('/books/{uuid}/reviews/{review}', [
         ReviewController::class,
         'update',
@@ -320,8 +386,11 @@ Route::middleware('auth:sanctum')->group(function () {
 
 
     /*
-    | Delete an existing review.
+    |--------------------------------------------------------------------------
+    | Delete an Existing Review
+    |--------------------------------------------------------------------------
     */
+
     Route::delete('/books/{uuid}/reviews/{review}', [
         ReviewController::class,
         'destroy',
@@ -332,9 +401,6 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     | Authenticated User Profile
     |--------------------------------------------------------------------------
-    |
-    | Returns the currently authenticated customer.
-    |
     */
 
     Route::get('/user', function (Request $request) {
@@ -427,12 +493,10 @@ Route::middleware('auth:sanctum')->group(function () {
         'show',
     ]);
 
-
     Route::post('/reader-preferences', [
         ReaderPreferenceController::class,
         'store',
     ]);
-
 
     Route::put('/reader-preferences', [
         ReaderPreferenceController::class,
@@ -493,7 +557,6 @@ Route::middleware('auth:sanctum')->group(function () {
         'show',
     ]);
 
-
     Route::put('/books/{uuid}/progress', [
         ReadingProgressController::class,
         'update',
@@ -507,16 +570,6 @@ Route::middleware('auth:sanctum')->group(function () {
     |
     | Favorites allow customers to mark entitled books for quick access.
     |
-    | GET:
-    | Determines whether the requested book is currently favorited.
-    |
-    | POST:
-    | Adds the requested book to the authenticated customer's favorites.
-    |
-    | DELETE:
-    | Removes the requested book from the authenticated customer's
-    | favorites.
-    |
     */
 
     Route::get('/books/{uuid}/favorites', [
@@ -524,12 +577,10 @@ Route::middleware('auth:sanctum')->group(function () {
         'show',
     ]);
 
-
     Route::post('/books/{uuid}/favorites', [
         FavoriteController::class,
         'store',
     ]);
-
 
     Route::delete('/books/{uuid}/favorites', [
         FavoriteController::class,
@@ -552,12 +603,10 @@ Route::middleware('auth:sanctum')->group(function () {
         'index',
     ]);
 
-
     Route::post('/books/{uuid}/bookmarks', [
         BookmarkController::class,
         'store',
     ]);
-
 
     Route::delete('/books/{uuid}/bookmarks/{bookmark}', [
         BookmarkController::class,
@@ -580,18 +629,15 @@ Route::middleware('auth:sanctum')->group(function () {
         'index',
     ]);
 
-
     Route::post('/books/{uuid}/highlights', [
         HighlightController::class,
         'store',
     ]);
 
-
     Route::put('/books/{uuid}/highlights/{highlight}', [
         HighlightController::class,
         'update',
     ]);
-
 
     Route::delete('/books/{uuid}/highlights/{highlight}', [
         HighlightController::class,
@@ -614,18 +660,15 @@ Route::middleware('auth:sanctum')->group(function () {
         'index',
     ]);
 
-
     Route::post('/books/{uuid}/notes', [
         ReadingNoteController::class,
         'store',
     ]);
 
-
     Route::put('/books/{uuid}/notes/{readingNote}', [
         ReadingNoteController::class,
         'update',
     ]);
-
 
     Route::delete('/books/{uuid}/notes/{readingNote}', [
         ReadingNoteController::class,
