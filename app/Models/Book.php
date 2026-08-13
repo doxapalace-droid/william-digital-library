@@ -38,10 +38,15 @@ class Book extends Model
     ];
 
     /**
+     * Use UUID for route model binding.
+     */
+    public function getRouteKeyName(): string
+    {
+        return 'uuid';
+    }
+
+    /**
      * Authors who wrote this book.
-     *
-     * A book may have multiple authors,
-     * and an author may write multiple books.
      */
     public function authors(): BelongsToMany
     {
@@ -51,9 +56,6 @@ class Book extends Model
 
     /**
      * Categories assigned to this book.
-     *
-     * A book may belong to multiple categories,
-     * and a category may contain multiple books.
      */
     public function categories(): BelongsToMany
     {
@@ -63,9 +65,6 @@ class Book extends Model
 
     /**
      * Entitlements granted for this book.
-     *
-     * These determine which users are allowed to read
-     * or download the book.
      */
     public function entitlements(): HasMany
     {
@@ -74,9 +73,6 @@ class Book extends Model
 
     /**
      * Reading progress records for this book.
-     *
-     * Each record represents a customer's current
-     * reading position and progress in this book.
      */
     public function readingProgress(): HasMany
     {

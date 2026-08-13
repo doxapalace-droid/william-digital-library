@@ -30,6 +30,7 @@ class BookDownloadTest extends TestCase
             'price' => 6.99,
             'currency' => 'USD',
             'is_published' => true,
+            'published_at' => now(),
             'pdf_path' => 'born-to-rule.pdf',
         ]);
 
@@ -40,7 +41,7 @@ class BookDownloadTest extends TestCase
 
         $response = $this
             ->actingAs($user)
-            ->get("/api/books/{$book->id}/download");
+            ->get("/api/books/{$book->uuid}/download");
 
         $response
             ->assertForbidden()
@@ -67,6 +68,7 @@ class BookDownloadTest extends TestCase
             'price' => 6.99,
             'currency' => 'USD',
             'is_published' => true,
+            'published_at' => now(),
             'pdf_path' => 'born-to-rule.pdf',
         ]);
 
@@ -88,7 +90,7 @@ class BookDownloadTest extends TestCase
 
         $response = $this
             ->actingAs($user)
-            ->get("/api/books/{$book->id}/download");
+            ->get("/api/books/{$book->uuid}/download");
 
         $response
             ->assertForbidden()
@@ -115,6 +117,7 @@ class BookDownloadTest extends TestCase
             'price' => 6.99,
             'currency' => 'USD',
             'is_published' => true,
+            'published_at' => now(),
             'pdf_path' => 'born-to-rule.pdf',
         ]);
 
@@ -136,7 +139,7 @@ class BookDownloadTest extends TestCase
 
         $response = $this
             ->actingAs($user)
-            ->get("/api/books/{$book->id}/download");
+            ->get("/api/books/{$book->uuid}/download");
 
         $response
             ->assertOk()
@@ -160,6 +163,7 @@ class BookDownloadTest extends TestCase
             'price' => 6.99,
             'currency' => 'USD',
             'is_published' => true,
+            'published_at' => now(),
             'pdf_path' => 'born-to-rule.pdf',
         ]);
 
@@ -181,7 +185,7 @@ class BookDownloadTest extends TestCase
 
         $response = $this
             ->actingAs($user)
-            ->get("/api/books/{$book->id}/download");
+            ->get("/api/books/{$book->uuid}/download");
 
         $response
             ->assertForbidden()
@@ -207,6 +211,7 @@ class BookDownloadTest extends TestCase
             'price' => 6.99,
             'currency' => 'USD',
             'is_published' => true,
+            'published_at' => now(),
             'pdf_path' => 'missing-book.pdf',
         ]);
 
@@ -223,7 +228,7 @@ class BookDownloadTest extends TestCase
 
         $response = $this
             ->actingAs($user)
-            ->get("/api/books/{$book->id}/download");
+            ->get("/api/books/{$book->uuid}/download");
 
         $response
             ->assertNotFound()

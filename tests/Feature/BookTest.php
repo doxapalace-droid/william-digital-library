@@ -11,12 +11,9 @@ class BookTest extends TestCase
 {
     use RefreshDatabase;
 
-    /*
-    |--------------------------------------------------------------------------
-    | Basic Book Tests
-    |--------------------------------------------------------------------------
-    */
-
+    /**
+     * A book can be created.
+     */
     public function test_book_can_be_created(): void
     {
         $book = Book::create([
@@ -43,6 +40,9 @@ class BookTest extends TestCase
         $this->assertTrue($book->is_published);
     }
 
+    /**
+     * Published books can be listed.
+     */
     public function test_published_books_can_be_listed(): void
     {
         Book::create([
@@ -70,6 +70,9 @@ class BookTest extends TestCase
             );
     }
 
+    /**
+     * Unpublished books are not listed.
+     */
     public function test_unpublished_books_are_not_listed(): void
     {
         Book::create([
@@ -106,6 +109,9 @@ class BookTest extends TestCase
             ]);
     }
 
+    /**
+     * A published book can be viewed by its slug.
+     */
     public function test_published_book_can_be_viewed_by_slug(): void
     {
         Book::create([
@@ -140,6 +146,9 @@ class BookTest extends TestCase
             );
     }
 
+    /**
+     * An unpublished book cannot be viewed by its slug.
+     */
     public function test_unpublished_book_cannot_be_viewed_by_slug(): void
     {
         Book::create([
@@ -160,38 +169,25 @@ class BookTest extends TestCase
         $response->assertNotFound();
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | Author Relationship Tests
-    |--------------------------------------------------------------------------
-    */
-
+    /**
+     * A book can belong to an author.
+     */
     public function test_book_can_belong_to_an_author(): void
     {
-        $author = Author::create([
+        $author = Author::factory()->create([
             'name' => 'William K. Danquah',
-            'slug' => 'william-k-danquah',
-            'bio' => 'Author and minister.',
-            'is_active' => true,
         ]);
 
-        $book = Book::create([
-            'title' => 'Born to Rule',
-            'slug' => 'born-to-rule',
-            'description' => 'A book about dominion.',
-            'author' => 'William K. Danquah',
-            'price' => 6.99,
-            'currency' => 'USD',
+        $book = Book::factory()->create([
             'is_published' => true,
-            'published_at' => now(),
         ]);
 
-        $book->authors()->attach($author->id);
-
-        $book->load('authors');
+        $book->authors()->attach($author);
 
         $this->assertTrue(
-            $book->authors->contains($author)
+            $book->authors()
+                ->where('authors.id', $author->id)
+                ->exists()
         );
 
         $this->assertDatabaseHas('author_book', [
@@ -200,33 +196,19 @@ class BookTest extends TestCase
         ]);
     }
 
+    /**
+     * An author can have multiple books.
+     */
     public function test_author_can_have_multiple_books(): void
     {
-        $author = Author::create([
-            'name' => 'William K. Danquah',
-            'slug' => 'william-k-danquah',
-            'bio' => 'Author and minister.',
-            'is_active' => true,
+        $author = Author::factory()->create();
+
+        $bookOne = Book::factory()->create([
+            'is_published' => true,
         ]);
 
-        $bookOne = Book::create([
-            'title' => 'Born to Rule',
-            'slug' => 'born-to-rule',
-            'author' => 'William K. Danquah',
-            'price' => 6.99,
-            'currency' => 'USD',
+        $bookTwo = Book::factory()->create([
             'is_published' => true,
-            'published_at' => now(),
-        ]);
-
-        $bookTwo = Book::create([
-            'title' => 'The Power of Binding and Loosing',
-            'slug' => 'the-power-of-binding-and-loosing',
-            'author' => 'William K. Danquah',
-            'price' => 6.99,
-            'currency' => 'USD',
-            'is_published' => true,
-            'published_at' => now(),
         ]);
 
         $author->books()->attach([
@@ -234,43 +216,39 @@ class BookTest extends TestCase
             $bookTwo->id,
         ]);
 
-        $author->load('books');
-
-        $this->assertCount(2, $author->books);
-
-        $this->assertTrue(
-            $author->books->contains($bookOne)
+        $this->assertCount(
+            2,
+            $author->books()->get()
         );
 
         $this->assertTrue(
-            $author->books->contains($bookTwo)
+            $author->books()
+                ->where('books.id', $bookOne->id)
+                ->exists()
+        );
+
+        $this->assertTrue(
+            $author->books()
+                ->where('books.id', $bookTwo->id)
+                ->exists()
         );
     }
 
+    /**
+     * A book can have multiple authors.
+     */
     public function test_book_can_have_multiple_authors(): void
     {
-        $authorOne = Author::create([
+        $authorOne = Author::factory()->create([
             'name' => 'William K. Danquah',
-            'slug' => 'william-k-danquah',
-            'bio' => 'Author and minister.',
-            'is_active' => true,
         ]);
 
-        $authorTwo = Author::create([
+        $authorTwo = Author::factory()->create([
             'name' => 'John Doe',
-            'slug' => 'john-doe',
-            'bio' => 'Co-author.',
-            'is_active' => true,
         ]);
 
-        $book = Book::create([
-            'title' => 'Kingdom Leadership',
-            'slug' => 'kingdom-leadership',
-            'author' => 'William K. Danquah',
-            'price' => 9.99,
-            'currency' => 'USD',
+        $book = Book::factory()->create([
             'is_published' => true,
-            'published_at' => now(),
         ]);
 
         $book->authors()->attach([
@@ -278,90 +256,109 @@ class BookTest extends TestCase
             $authorTwo->id,
         ]);
 
-        $book->load('authors');
-
-        $this->assertCount(2, $book->authors);
-
-        $this->assertTrue(
-            $book->authors->contains($authorOne)
+        $this->assertCount(
+            2,
+            $book->authors()->get()
         );
 
         $this->assertTrue(
-            $book->authors->contains($authorTwo)
+            $book->authors()
+                ->where('authors.id', $authorOne->id)
+                ->exists()
+        );
+
+        $this->assertTrue(
+            $book->authors()
+                ->where('authors.id', $authorTwo->id)
+                ->exists()
         );
     }
 
+    /**
+     * A book's author relationship can be synchronized.
+     */
     public function test_book_author_relationship_can_be_synced(): void
     {
-        $authorOne = Author::create([
-            'name' => 'William K. Danquah',
-            'slug' => 'william-k-danquah',
-            'bio' => 'Author and minister.',
-            'is_active' => true,
-        ]);
+        $authorOne = Author::factory()->create();
+        $authorTwo = Author::factory()->create();
+        $authorThree = Author::factory()->create();
 
-        $authorTwo = Author::create([
-            'name' => 'John Doe',
-            'slug' => 'john-doe',
-            'bio' => 'Co-author.',
-            'is_active' => true,
-        ]);
-
-        $book = Book::create([
-            'title' => 'Kingdom Leadership',
-            'slug' => 'kingdom-leadership',
-            'author' => 'William K. Danquah',
-            'price' => 9.99,
-            'currency' => 'USD',
+        $book = Book::factory()->create([
             'is_published' => true,
-            'published_at' => now(),
         ]);
 
-        $book->authors()->attach($authorOne->id);
-
-        $book->authors()->sync([
+        $book->authors()->attach([
+            $authorOne->id,
             $authorTwo->id,
         ]);
 
-        $book->load('authors');
-
-        $this->assertCount(1, $book->authors);
-
-        $this->assertTrue(
-            $book->authors->contains($authorTwo)
-        );
+        $book->authors()->sync([
+            $authorTwo->id,
+            $authorThree->id,
+        ]);
 
         $this->assertFalse(
-            $book->authors->contains($authorOne)
+            $book->authors()
+                ->where('authors.id', $authorOne->id)
+                ->exists()
+        );
+
+        $this->assertTrue(
+            $book->authors()
+                ->where('authors.id', $authorTwo->id)
+                ->exists()
+        );
+
+        $this->assertTrue(
+            $book->authors()
+                ->where('authors.id', $authorThree->id)
+                ->exists()
+        );
+
+        $this->assertCount(
+            2,
+            $book->authors()->get()
         );
     }
 
+    /**
+     * A book's author relationship can be removed.
+     */
     public function test_book_author_relationship_can_be_removed(): void
     {
-        $author = Author::create([
-            'name' => 'William K. Danquah',
-            'slug' => 'william-k-danquah',
-            'bio' => 'Author and minister.',
-            'is_active' => true,
-        ]);
+        $authorOne = Author::factory()->create();
+        $authorTwo = Author::factory()->create();
 
-        $book = Book::create([
-            'title' => 'Born to Rule',
-            'slug' => 'born-to-rule',
-            'description' => 'A book about dominion.',
-            'author' => 'William K. Danquah',
-            'price' => 6.99,
-            'currency' => 'USD',
+        $book = Book::factory()->create([
             'is_published' => true,
-            'published_at' => now(),
         ]);
 
-        $book->authors()->attach($author->id);
+        $book->authors()->attach([
+            $authorOne->id,
+            $authorTwo->id,
+        ]);
 
-        $book->authors()->detach($author->id);
+        $book->authors()->detach($authorOne->id);
+
+        $this->assertFalse(
+            $book->authors()
+                ->where('authors.id', $authorOne->id)
+                ->exists()
+        );
+
+        $this->assertTrue(
+            $book->authors()
+                ->where('authors.id', $authorTwo->id)
+                ->exists()
+        );
 
         $this->assertDatabaseMissing('author_book', [
-            'author_id' => $author->id,
+            'author_id' => $authorOne->id,
+            'book_id' => $book->id,
+        ]);
+
+        $this->assertDatabaseHas('author_book', [
+            'author_id' => $authorTwo->id,
             'book_id' => $book->id,
         ]);
     }

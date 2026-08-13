@@ -39,9 +39,6 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 | Public Book Catalogue
 |--------------------------------------------------------------------------
-|
-| Returns the public catalogue of published books.
-|
 */
 
 Route::get('/books', [
@@ -55,29 +52,8 @@ Route::get('/books', [
 | Book Search
 |--------------------------------------------------------------------------
 |
-| Allows visitors to search and filter the public book catalogue.
-|
-| Supported functionality:
-|
-| - Search published books by title.
-| - Search published books by author.
-| - Case-insensitive searching.
-| - Filter published books by category.
-| - Combine a text search with a category filter.
-| - Return an empty collection when nothing matches.
-|
-| Only published books should be returned by the controller.
-|
-| Examples:
-|
-| GET /api/books/search?q=Binding
-| GET /api/books/search?q=William
-| GET /api/books/search?category=1
-| GET /api/books/search?q=Dominion&category=1
-|
 | IMPORTANT:
-| This route must remain BEFORE /books/{slug}.
-| Otherwise Laravel may interpret "search" as a book slug.
+| Keep this route BEFORE /books/{slug}.
 |
 */
 
@@ -91,9 +67,6 @@ Route::get('/books/search', [
 |--------------------------------------------------------------------------
 | Public Book Details
 |--------------------------------------------------------------------------
-|
-| Returns a single published book using its public slug.
-|
 */
 
 Route::get('/books/{slug}', [
@@ -106,9 +79,6 @@ Route::get('/books/{slug}', [
 |--------------------------------------------------------------------------
 | Public Categories
 |--------------------------------------------------------------------------
-|
-| Returns active public categories and their public details.
-|
 */
 
 Route::get('/categories', [
@@ -126,9 +96,6 @@ Route::get('/categories/{category}', [
 |--------------------------------------------------------------------------
 | Public Authors
 |--------------------------------------------------------------------------
-|
-| Returns active authors and their public details.
-|
 */
 
 Route::get('/authors', [
@@ -148,7 +115,6 @@ Route::get('/authors/{author}', [
 |--------------------------------------------------------------------------
 |
 | These routes require authentication and the admin role.
-| Administrators can manage books, categories, and authors.
 |
 */
 
@@ -161,9 +127,6 @@ Route::middleware([
     |--------------------------------------------------------------------------
     | Book Management
     |--------------------------------------------------------------------------
-    |
-    | Administrators can create, update, and delete books.
-    |
     */
 
     Route::post('/books', [
@@ -186,9 +149,6 @@ Route::middleware([
     |--------------------------------------------------------------------------
     | Category Management
     |--------------------------------------------------------------------------
-    |
-    | Administrators can create, update, and delete categories.
-    |
     */
 
     Route::post('/categories', [
@@ -211,9 +171,6 @@ Route::middleware([
     |--------------------------------------------------------------------------
     | Author Management
     |--------------------------------------------------------------------------
-    |
-    | Administrators can create, update, and delete authors.
-    |
     */
 
     Route::post('/authors', [
@@ -239,8 +196,6 @@ Route::middleware([
 |--------------------------------------------------------------------------
 |
 | Every route in this group requires a valid Sanctum-authenticated user.
-| Individual controllers remain responsible for verifying ownership,
-| entitlement, and access to book-specific resources.
 |
 */
 
@@ -248,19 +203,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | Reviews & Automatic Rating Statistics
+    | Reviews
     |--------------------------------------------------------------------------
-    |
-    | Customers can view, create, update, and delete reviews for books
-    | they are entitled to access.
-    |
-    | Rating statistics are automatically maintained by ReviewObserver
-    | and BookRatingService.
-    |
-    */
-
-    /*
-    | Get all reviews for a book.
     */
 
     Route::get('/books/{uuid}/reviews', [
@@ -268,15 +212,36 @@ Route::middleware('auth:sanctum')->group(function () {
         'index',
     ]);
 
+    Route::get('/books/{uuid}/reviews/statistics', [
+        ReviewController::class,
+        'statistics',
+    ]);
+
+    Route::post('/books/{uuid}/reviews', [
+        ReviewController::class,
+        'store',
+    ]);
+
+    Route::put('/books/{uuid}/reviews/{review}', [
+        ReviewController::class,
+        'update',
+    ]);
+
+    Route::patch('/books/{uuid}/reviews/{review}', [
+        ReviewController::class,
+        'update',
+    ]);
+
+    Route::delete('/books/{uuid}/reviews/{review}', [
+        ReviewController::class,
+        'destroy',
+    ]);
+
 
     /*
     |--------------------------------------------------------------------------
     | Payments
     |--------------------------------------------------------------------------
-    |
-    | Customers can view payments for their orders, create payments,
-    | and verify their payments.
-    |
     */
 
     Route::get('/orders/{uuid}/payments', [
@@ -341,64 +306,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | Review Statistics
-    |--------------------------------------------------------------------------
-    |
-    | IMPORTANT:
-    | This route is placed before /reviews/{review} routes so that
-    | "statistics" is treated as a fixed route segment.
-    |
-    */
-
-    Route::get('/books/{uuid}/reviews/statistics', [
-        ReviewController::class,
-        'statistics',
-    ]);
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Submit a New Review
-    |--------------------------------------------------------------------------
-    */
-
-    Route::post('/books/{uuid}/reviews', [
-        ReviewController::class,
-        'store',
-    ]);
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Update an Existing Review
-    |--------------------------------------------------------------------------
-    */
-
-    Route::put('/books/{uuid}/reviews/{review}', [
-        ReviewController::class,
-        'update',
-    ]);
-
-    Route::patch('/books/{uuid}/reviews/{review}', [
-        ReviewController::class,
-        'update',
-    ]);
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Delete an Existing Review
-    |--------------------------------------------------------------------------
-    */
-
-    Route::delete('/books/{uuid}/reviews/{review}', [
-        ReviewController::class,
-        'destroy',
-    ]);
-
-
-    /*
-    |--------------------------------------------------------------------------
     | Authenticated User Profile
     |--------------------------------------------------------------------------
     */
@@ -419,6 +326,11 @@ Route::middleware('auth:sanctum')->group(function () {
         'index',
     ]);
 
+    Route::post('/books/{uuid}/recently-viewed', [
+        RecentlyViewedController::class,
+        'store',
+    ]);
+
 
     /*
     |--------------------------------------------------------------------------
@@ -429,22 +341,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/recommendations', [
         RecommendationController::class,
         'index',
-    ]);
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | My Recently Viewed Books
-    |--------------------------------------------------------------------------
-    |
-    | Returns books the authenticated user is currently entitled
-    | to access.
-    |
-    */
-
-    Route::post('/books/{uuid}/recently-viewed', [
-        RecentlyViewedController::class,
-        'store',
     ]);
 
 
@@ -464,10 +360,6 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     | Continue Reading
     |--------------------------------------------------------------------------
-    |
-    | Returns books the user has started reading.
-    | Books should be ordered by the user's most recent reading activity.
-    |
     */
 
     Route::get('/continue-reading', [
@@ -480,12 +372,6 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     | Reader Preferences
     |--------------------------------------------------------------------------
-    |
-    | Authenticated users can retrieve, create, and update their personal
-    | reader appearance and layout preferences.
-    |
-    | Each preference record belongs exclusively to the authenticated user.
-    |
     */
 
     Route::get('/reader-preferences', [
@@ -508,12 +394,6 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     | Secure Book Reading
     |--------------------------------------------------------------------------
-    |
-    | Allows an authenticated customer to securely read a book.
-    |
-    | BookReaderController must verify that the authenticated customer
-    | currently has a valid entitlement to the requested book.
-    |
     */
 
     Route::get('/books/{book}/read', [
@@ -526,12 +406,6 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     | Secure Book Download
     |--------------------------------------------------------------------------
-    |
-    | Allows an authenticated customer to download an entitled book.
-    |
-    | BookDownloadController must verify book access before returning
-    | or streaming the protected file.
-    |
     */
 
     Route::get('/books/{book}/download', [
@@ -544,12 +418,6 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     | Reading Progress
     |--------------------------------------------------------------------------
-    |
-    | Customers may retrieve and update their reading position.
-    |
-    | ReadingProgressController additionally verifies that the customer
-    | has a valid entitlement for the requested book.
-    |
     */
 
     Route::get('/books/{uuid}/progress', [
@@ -567,9 +435,6 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     | Favorites
     |--------------------------------------------------------------------------
-    |
-    | Favorites allow customers to mark entitled books for quick access.
-    |
     */
 
     Route::get('/books/{uuid}/favorites', [
@@ -592,10 +457,6 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     | Bookmarks
     |--------------------------------------------------------------------------
-    |
-    | Authenticated customers can create, view, and remove bookmarks
-    | for books they are currently entitled to read.
-    |
     */
 
     Route::get('/books/{uuid}/bookmarks', [
@@ -618,10 +479,6 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     | Highlights
     |--------------------------------------------------------------------------
-    |
-    | Authenticated customers can create, view, update, and remove
-    | highlights for books they are currently entitled to read.
-    |
     */
 
     Route::get('/books/{uuid}/highlights', [
@@ -649,10 +506,6 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     | Reading Notes
     |--------------------------------------------------------------------------
-    |
-    | Authenticated customers can create, view, update, and remove
-    | personal reading notes for books they are entitled to read.
-    |
     */
 
     Route::get('/books/{uuid}/notes', [
