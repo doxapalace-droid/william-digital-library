@@ -111,8 +111,16 @@ class HighlightController extends Controller
     }
 
     /**
-     * Find a published book and ensure the authenticated
-     * user has an active entitlement.
+     * Find a published book that the authenticated user
+     * currently has permission to read.
+     *
+     * A valid reading entitlement must:
+     *
+     * - belong to the authenticated user
+     * - be active
+     * - allow reading
+     * - not be revoked
+     * - not be expired
      */
     private function findAccessibleBook(
         Request $request,
@@ -125,6 +133,9 @@ class HighlightController extends Controller
 
         $hasAccess = $book->entitlements()
             ->where('user_id', $request->user()->id)
+            ->where('status', 'active')
+            ->where('can_read', true)
+            ->whereNull('revoked_at')
             ->where(function ($query) {
                 $query
                     ->whereNull('expires_at')

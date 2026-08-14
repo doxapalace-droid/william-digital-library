@@ -78,7 +78,7 @@ class CategoryTest extends TestCase
     }
 
     /**
-     * A single category can be viewed publicly.
+     * A single active category can be viewed publicly.
      */
     public function test_single_category_can_be_viewed(): void
     {
@@ -99,6 +99,26 @@ class CategoryTest extends TestCase
             ->assertJsonPath('data.id', $category->id)
             ->assertJsonPath('data.name', 'Leadership')
             ->assertJsonPath('data.slug', 'leadership');
+    }
+
+    /**
+     * An inactive category cannot be viewed publicly.
+     */
+    public function test_inactive_category_cannot_be_viewed_publicly(): void
+    {
+        $category = Category::create([
+            'name' => 'Hidden Category',
+            'slug' => 'hidden-category',
+            'description' => 'This category is inactive.',
+            'sort_order' => 1,
+            'is_active' => false,
+        ]);
+
+        $response = $this->getJson(
+            "/api/categories/{$category->id}"
+        );
+
+        $response->assertNotFound();
     }
 
     /**
@@ -171,6 +191,10 @@ class CategoryTest extends TestCase
             ->assertJsonPath(
                 'data.name',
                 'Prayer and Intercession'
+            )
+            ->assertJsonPath(
+                'data.slug',
+                'prayer-and-intercession'
             );
 
         $this->assertDatabaseHas('categories', [

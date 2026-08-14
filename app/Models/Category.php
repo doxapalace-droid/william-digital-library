@@ -35,24 +35,13 @@ class Category extends Model
 
     /**
      * Books belonging to this category.
+     *
+     * A category may contain many books,
+     * and a book may belong to many categories.
      */
     public function books(): BelongsToMany
     {
-        return $this->belongsToMany(Book::class);
+        return $this->belongsToMany(Book::class)
+            ->withTimestamps();
     }
-
-    /**
- * Authors of this book.
- *
- * A book may have multiple authors and
- * an author may have multiple books.
- */
-    public function authors(): BelongsToMany
-    {
-    return $this->belongsToMany(Author::class)
-        ->withTimestamps();
-    }
-
-
-    
 }

@@ -33,8 +33,8 @@ class AppServiceProvider extends ServiceProvider
                 string $token
             ) {
                 return config('app.frontend_url')
-                    . "/password-reset/{$token}?email="
-                    . urlencode(
+                    ."/password-reset/{$token}?email="
+                    .urlencode(
                         $notifiable
                             ->getEmailForPasswordReset()
                     );

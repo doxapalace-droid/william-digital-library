@@ -41,12 +41,7 @@ class BookmarkTest extends TestCase
             'is_published' => true,
         ]);
 
-        BookEntitlement::create([
-            'user_id' => $user->id,
-            'book_id' => $book->id,
-            'source' => 'purchase',
-            'expires_at' => null,
-        ]);
+        $this->createActiveReadingEntitlement($user, $book);
 
         Sanctum::actingAs($user);
 
@@ -87,12 +82,7 @@ class BookmarkTest extends TestCase
             'is_published' => true,
         ]);
 
-        BookEntitlement::create([
-            'user_id' => $user->id,
-            'book_id' => $book->id,
-            'source' => 'purchase',
-            'expires_at' => null,
-        ]);
+        $this->createActiveReadingEntitlement($user, $book);
 
         Bookmark::create([
             'user_id' => $user->id,
@@ -128,12 +118,7 @@ class BookmarkTest extends TestCase
             'is_published' => true,
         ]);
 
-        BookEntitlement::create([
-            'user_id' => $user->id,
-            'book_id' => $book->id,
-            'source' => 'purchase',
-            'expires_at' => null,
-        ]);
+        $this->createActiveReadingEntitlement($user, $book);
 
         Bookmark::create([
             'user_id' => $otherUser->id,
@@ -194,12 +179,7 @@ class BookmarkTest extends TestCase
             'is_published' => true,
         ]);
 
-        BookEntitlement::create([
-            'user_id' => $user->id,
-            'book_id' => $book->id,
-            'source' => 'purchase',
-            'expires_at' => null,
-        ]);
+        $this->createActiveReadingEntitlement($user, $book);
 
         Sanctum::actingAs($user);
 
@@ -230,12 +210,7 @@ class BookmarkTest extends TestCase
             'is_published' => true,
         ]);
 
-        BookEntitlement::create([
-            'user_id' => $user->id,
-            'book_id' => $book->id,
-            'source' => 'purchase',
-            'expires_at' => null,
-        ]);
+        $this->createActiveReadingEntitlement($user, $book);
 
         $bookmark = Bookmark::create([
             'user_id' => $user->id,
@@ -271,12 +246,7 @@ class BookmarkTest extends TestCase
             'is_published' => true,
         ]);
 
-        BookEntitlement::create([
-            'user_id' => $user->id,
-            'book_id' => $book->id,
-            'source' => 'purchase',
-            'expires_at' => null,
-        ]);
+        $this->createActiveReadingEntitlement($user, $book);
 
         $bookmark = Bookmark::create([
             'user_id' => $otherUser->id,
@@ -298,6 +268,211 @@ class BookmarkTest extends TestCase
         $this->assertDatabaseHas('bookmarks', [
             'id' => $bookmark->id,
             'user_id' => $otherUser->id,
+        ]);
+    }
+
+    /**
+     * A customer without reading permission cannot access bookmarks.
+     */
+    public function test_user_cannot_access_bookmarks_without_read_permission(): void
+    {
+        $user = User::factory()->create();
+
+        $book = Book::factory()->create([
+            'is_published' => true,
+        ]);
+
+        BookEntitlement::create([
+            'user_id' => $user->id,
+            'book_id' => $book->id,
+            'source' => 'purchase',
+            'can_read' => false,
+            'can_download' => true,
+            'status' => 'active',
+            'granted_at' => now(),
+            'expires_at' => null,
+            'revoked_at' => null,
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $this->getJson(
+            "/api/books/{$book->uuid}/bookmarks"
+        )->assertForbidden();
+
+        $this->postJson(
+            "/api/books/{$book->uuid}/bookmarks",
+            [
+                'current_page' => 10,
+                'location' => 'page-10',
+                'label' => 'Test bookmark',
+            ]
+        )->assertForbidden();
+    }
+
+    /**
+     * A customer with an inactive entitlement cannot access bookmarks.
+     */
+    public function test_user_cannot_access_bookmarks_with_inactive_entitlement(): void
+    {
+        $user = User::factory()->create();
+
+        $book = Book::factory()->create([
+            'is_published' => true,
+        ]);
+
+        BookEntitlement::create([
+            'user_id' => $user->id,
+            'book_id' => $book->id,
+            'source' => 'purchase',
+            'can_read' => true,
+            'can_download' => false,
+            'status' => 'inactive',
+            'granted_at' => now(),
+            'expires_at' => null,
+            'revoked_at' => null,
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $this->getJson(
+            "/api/books/{$book->uuid}/bookmarks"
+        )->assertForbidden();
+
+        $this->postJson(
+            "/api/books/{$book->uuid}/bookmarks",
+            [
+                'current_page' => 10,
+                'location' => 'page-10',
+                'label' => 'Test bookmark',
+            ]
+        )->assertForbidden();
+    }
+
+    /**
+     * A customer with a revoked entitlement cannot access bookmarks.
+     */
+    public function test_user_cannot_access_bookmarks_with_revoked_entitlement(): void
+    {
+        $user = User::factory()->create();
+
+        $book = Book::factory()->create([
+            'is_published' => true,
+        ]);
+
+        BookEntitlement::create([
+            'user_id' => $user->id,
+            'book_id' => $book->id,
+            'source' => 'purchase',
+            'can_read' => true,
+            'can_download' => false,
+            'status' => 'active',
+            'granted_at' => now(),
+            'expires_at' => null,
+            'revoked_at' => now(),
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $this->getJson(
+            "/api/books/{$book->uuid}/bookmarks"
+        )->assertForbidden();
+
+        $this->postJson(
+            "/api/books/{$book->uuid}/bookmarks",
+            [
+                'current_page' => 10,
+                'location' => 'page-10',
+                'label' => 'Test bookmark',
+            ]
+        )->assertForbidden();
+    }
+
+    /**
+     * A customer with an expired entitlement cannot access bookmarks.
+     */
+    public function test_user_cannot_access_bookmarks_with_expired_entitlement(): void
+    {
+        $user = User::factory()->create();
+
+        $book = Book::factory()->create([
+            'is_published' => true,
+        ]);
+
+        BookEntitlement::create([
+            'user_id' => $user->id,
+            'book_id' => $book->id,
+            'source' => 'purchase',
+            'can_read' => true,
+            'can_download' => false,
+            'status' => 'active',
+            'granted_at' => now()->subMonth(),
+            'expires_at' => now()->subMinute(),
+            'revoked_at' => null,
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $this->getJson(
+            "/api/books/{$book->uuid}/bookmarks"
+        )->assertForbidden();
+
+        $this->postJson(
+            "/api/books/{$book->uuid}/bookmarks",
+            [
+                'current_page' => 10,
+                'location' => 'page-10',
+                'label' => 'Test bookmark',
+            ]
+        )->assertForbidden();
+    }
+
+    /**
+     * A customer cannot access bookmarks for an unpublished book.
+     */
+    public function test_user_cannot_access_bookmarks_for_unpublished_book(): void
+    {
+        $user = User::factory()->create();
+
+        $book = Book::factory()->create([
+            'is_published' => false,
+        ]);
+
+        $this->createActiveReadingEntitlement($user, $book);
+
+        Sanctum::actingAs($user);
+
+        $this->getJson(
+            "/api/books/{$book->uuid}/bookmarks"
+        )->assertNotFound();
+
+        $this->postJson(
+            "/api/books/{$book->uuid}/bookmarks",
+            [
+                'current_page' => 10,
+                'location' => 'page-10',
+                'label' => 'Test bookmark',
+            ]
+        )->assertNotFound();
+    }
+
+    /**
+     * Create a valid active entitlement that allows reading.
+     */
+    private function createActiveReadingEntitlement(
+        User $user,
+        Book $book
+    ): BookEntitlement {
+        return BookEntitlement::create([
+            'user_id' => $user->id,
+            'book_id' => $book->id,
+            'source' => 'purchase',
+            'can_read' => true,
+            'can_download' => false,
+            'status' => 'active',
+            'granted_at' => now(),
+            'expires_at' => null,
+            'revoked_at' => null,
         ]);
     }
 }

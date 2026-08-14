@@ -74,12 +74,24 @@ class AuthorController extends Controller
     }
 
     /**
-     * Display a single author.
+     * Display a single active author.
      *
      * Public endpoint.
+     *
+     * Only published books belonging to the author
+     * are included in the response.
      */
     public function show(Author $author): JsonResponse
     {
+        /*
+         * Inactive authors are not publicly accessible.
+         */
+        abort_unless(
+            $author->is_active,
+            404,
+            'Author not found.'
+        );
+
         $author->load([
             'books' => function ($query) {
                 $query
@@ -146,6 +158,7 @@ class AuthorController extends Controller
      * Admin only.
      *
      * Detaches the author from all books before deletion.
+     * The books themselves are not deleted.
      */
     public function destroy(Author $author): JsonResponse
     {

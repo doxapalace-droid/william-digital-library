@@ -28,15 +28,41 @@ class CategoryController extends Controller
 
     /**
      * Store a newly created category.
+     *
+     * Admin only.
      */
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255', 'unique:categories,name'],
-            'slug' => ['required', 'string', 'max:255', 'unique:categories,slug'],
-            'description' => ['nullable', 'string'],
-            'sort_order' => ['nullable', 'integer', 'min:0'],
-            'is_active' => ['nullable', 'boolean'],
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+                'unique:categories,name',
+            ],
+
+            'slug' => [
+                'required',
+                'string',
+                'max:255',
+                'unique:categories,slug',
+            ],
+
+            'description' => [
+                'nullable',
+                'string',
+            ],
+
+            'sort_order' => [
+                'nullable',
+                'integer',
+                'min:0',
+            ],
+
+            'is_active' => [
+                'nullable',
+                'boolean',
+            ],
         ]);
 
         $category = Category::create([
@@ -54,13 +80,21 @@ class CategoryController extends Controller
     }
 
     /**
-     * Display a single category.
+     * Display a single active category.
      */
     public function show(Category $category): JsonResponse
     {
+        abort_unless(
+            $category->is_active,
+            404,
+            'Category not found.'
+        );
+
         $category->load([
             'books' => function ($query) {
-                $query->where('is_published', true);
+                $query
+                    ->where('is_published', true)
+                    ->orderBy('title');
             },
         ]);
 
@@ -71,27 +105,47 @@ class CategoryController extends Controller
 
     /**
      * Update an existing category.
+     *
+     * Admin only.
      */
-    public function update(Request $request, Category $category): JsonResponse
-    {
+    public function update(
+        Request $request,
+        Category $category
+    ): JsonResponse {
         $validated = $request->validate([
             'name' => [
                 'sometimes',
                 'required',
                 'string',
                 'max:255',
-                Rule::unique('categories', 'name')->ignore($category->id),
+                Rule::unique('categories', 'name')
+                    ->ignore($category->id),
             ],
+
             'slug' => [
                 'sometimes',
                 'required',
                 'string',
                 'max:255',
-                Rule::unique('categories', 'slug')->ignore($category->id),
+                Rule::unique('categories', 'slug')
+                    ->ignore($category->id),
             ],
-            'description' => ['nullable', 'string'],
-            'sort_order' => ['nullable', 'integer', 'min:0'],
-            'is_active' => ['nullable', 'boolean'],
+
+            'description' => [
+                'nullable',
+                'string',
+            ],
+
+            'sort_order' => [
+                'nullable',
+                'integer',
+                'min:0',
+            ],
+
+            'is_active' => [
+                'nullable',
+                'boolean',
+            ],
         ]);
 
         $category->update($validated);
@@ -104,10 +158,13 @@ class CategoryController extends Controller
 
     /**
      * Remove a category.
+     *
+     * Admin only.
      */
     public function destroy(Category $category): JsonResponse
     {
         $category->books()->detach();
+
         $category->delete();
 
         return response()->json([

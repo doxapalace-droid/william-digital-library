@@ -25,10 +25,21 @@ class Payment extends Model
         'failed_at',
     ];
 
+    /**
+     * Attribute casting.
+     */
     protected function casts(): array
     {
         return [
             'amount' => 'decimal:2',
+
+            /*
+             * Paystack returns structured gateway data.
+             * Store it as JSON in the database and expose it
+             * as an array in PHP.
+             */
+            'gateway_response' => 'array',
+
             'paid_at' => 'datetime',
             'failed_at' => 'datetime',
         ];
@@ -50,16 +61,25 @@ class Payment extends Model
         return $this->belongsTo(User::class);
     }
 
+    /**
+     * Determine whether the payment was successful.
+     */
     public function isSuccessful(): bool
     {
         return $this->status === 'successful';
     }
 
+    /**
+     * Determine whether the payment is pending.
+     */
     public function isPending(): bool
     {
         return $this->status === 'pending';
     }
 
+    /**
+     * Determine whether the payment failed.
+     */
     public function isFailed(): bool
     {
         return $this->status === 'failed';

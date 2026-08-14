@@ -363,15 +363,205 @@ class HighlightTest extends TestCase
     }
 
     /**
-     * Give a user permission to read a book.
+     * A user without reading permission cannot access highlights.
      */
-    private function entitleUser(User $user, Book $book): void
+    public function test_user_cannot_access_highlights_without_read_permission(): void
     {
+        $user = User::factory()->create();
+
+        $book = Book::factory()->create([
+            'is_published' => true,
+        ]);
+
         BookEntitlement::create([
             'user_id' => $user->id,
             'book_id' => $book->id,
             'source' => 'purchase',
+            'can_read' => false,
+            'can_download' => true,
+            'status' => 'active',
+            'granted_at' => now(),
             'expires_at' => null,
+            'revoked_at' => null,
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $this->getJson(
+            "/api/books/{$book->uuid}/highlights"
+        )->assertForbidden();
+
+        $this->postJson(
+            "/api/books/{$book->uuid}/highlights",
+            [
+                'current_page' => 10,
+                'selected_text' => 'Test highlight.',
+                'color' => 'yellow',
+            ]
+        )->assertForbidden();
+    }
+
+    /**
+     * A user with an inactive entitlement cannot access highlights.
+     */
+    public function test_user_cannot_access_highlights_with_inactive_entitlement(): void
+    {
+        $user = User::factory()->create();
+
+        $book = Book::factory()->create([
+            'is_published' => true,
+        ]);
+
+        BookEntitlement::create([
+            'user_id' => $user->id,
+            'book_id' => $book->id,
+            'source' => 'purchase',
+            'can_read' => true,
+            'can_download' => false,
+            'status' => 'inactive',
+            'granted_at' => now(),
+            'expires_at' => null,
+            'revoked_at' => null,
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $this->getJson(
+            "/api/books/{$book->uuid}/highlights"
+        )->assertForbidden();
+
+        $this->postJson(
+            "/api/books/{$book->uuid}/highlights",
+            [
+                'current_page' => 10,
+                'selected_text' => 'Test highlight.',
+                'color' => 'yellow',
+            ]
+        )->assertForbidden();
+    }
+
+    /**
+     * A user with a revoked entitlement cannot access highlights.
+     */
+    public function test_user_cannot_access_highlights_with_revoked_entitlement(): void
+    {
+        $user = User::factory()->create();
+
+        $book = Book::factory()->create([
+            'is_published' => true,
+        ]);
+
+        BookEntitlement::create([
+            'user_id' => $user->id,
+            'book_id' => $book->id,
+            'source' => 'purchase',
+            'can_read' => true,
+            'can_download' => false,
+            'status' => 'active',
+            'granted_at' => now(),
+            'expires_at' => null,
+            'revoked_at' => now(),
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $this->getJson(
+            "/api/books/{$book->uuid}/highlights"
+        )->assertForbidden();
+
+        $this->postJson(
+            "/api/books/{$book->uuid}/highlights",
+            [
+                'current_page' => 10,
+                'selected_text' => 'Test highlight.',
+                'color' => 'yellow',
+            ]
+        )->assertForbidden();
+    }
+
+    /**
+     * A user with an expired entitlement cannot access highlights.
+     */
+    public function test_user_cannot_access_highlights_with_expired_entitlement(): void
+    {
+        $user = User::factory()->create();
+
+        $book = Book::factory()->create([
+            'is_published' => true,
+        ]);
+
+        BookEntitlement::create([
+            'user_id' => $user->id,
+            'book_id' => $book->id,
+            'source' => 'purchase',
+            'can_read' => true,
+            'can_download' => false,
+            'status' => 'active',
+            'granted_at' => now()->subMonth(),
+            'expires_at' => now()->subMinute(),
+            'revoked_at' => null,
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $this->getJson(
+            "/api/books/{$book->uuid}/highlights"
+        )->assertForbidden();
+
+        $this->postJson(
+            "/api/books/{$book->uuid}/highlights",
+            [
+                'current_page' => 10,
+                'selected_text' => 'Test highlight.',
+                'color' => 'yellow',
+            ]
+        )->assertForbidden();
+    }
+
+    /**
+     * A user cannot access highlights for an unpublished book.
+     */
+    public function test_user_cannot_access_highlights_for_unpublished_book(): void
+    {
+        $user = User::factory()->create();
+
+        $book = Book::factory()->create([
+            'is_published' => false,
+        ]);
+
+        $this->entitleUser($user, $book);
+
+        Sanctum::actingAs($user);
+
+        $this->getJson(
+            "/api/books/{$book->uuid}/highlights"
+        )->assertNotFound();
+
+        $this->postJson(
+            "/api/books/{$book->uuid}/highlights",
+            [
+                'current_page' => 10,
+                'selected_text' => 'Test highlight.',
+                'color' => 'yellow',
+            ]
+        )->assertNotFound();
+    }
+
+    /**
+     * Give a user permission to read a book.
+     */
+    private function entitleUser(User $user, Book $book): BookEntitlement
+    {
+        return BookEntitlement::create([
+            'user_id' => $user->id,
+            'book_id' => $book->id,
+            'source' => 'purchase',
+            'can_read' => true,
+            'can_download' => false,
+            'status' => 'active',
+            'granted_at' => now(),
+            'expires_at' => null,
+            'revoked_at' => null,
         ]);
     }
 }

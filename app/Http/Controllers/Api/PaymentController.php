@@ -3,17 +3,26 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\BookEntitlement;
 use App\Models\Order;
 use App\Models\Payment;
+use App\Services\PaymentGatewayInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use RuntimeException;
 
 class PaymentController extends Controller
 {
+    public function __construct(
+        protected PaymentGatewayInterface $gateway
+    ) {
+    }
+
     /**
-     * Display the authenticated user's payment history for an order.
+     * Display the authenticated user's payment history
+     * for an order.
      */
     public function index(
         Request $request,
@@ -27,16 +36,20 @@ class PaymentController extends Controller
 
         return response()->json([
             'data' => $order->payments
-                ->map(fn (Payment $payment) => $this->formatPayment($payment))
+                ->map(
+                    fn (Payment $payment) =>
+                        $this->formatPayment($payment)
+                )
                 ->values(),
         ]);
     }
 
     /**
-     * Initiate payment for an unpaid order.
+     * Initialize a payment for an unpaid order.
      *
-     * This creates the internal payment record.
-     * Actual gateway processing will be added separately.
+     * This creates the local payment record and then
+     * initializes the transaction with the configured
+     * payment gateway.
      */
     public function store(Request $request): JsonResponse
     {
@@ -45,6 +58,7 @@ class PaymentController extends Controller
                 'required',
                 'uuid',
             ],
+
             'gateway' => [
                 'required',
                 'string',
@@ -85,8 +99,9 @@ class PaymentController extends Controller
         }
 
         /*
-         * Do not create another payment when a pending
-         * payment already exists for this order and gateway.
+         * If a pending payment already exists for this
+         * order and gateway, return it instead of creating
+         * another payment.
          */
         $existingPayment = Payment::query()
             ->where('order_id', $order->id)
@@ -97,15 +112,64 @@ class PaymentController extends Controller
             ->first();
 
         if ($existingPayment) {
+            /*
+             * If the payment already has a reference,
+             * return it directly.
+             *
+             * Otherwise initialize it with the gateway.
+             */
+            if ($existingPayment->transaction_reference) {
+                return response()->json([
+                    'data' => $this->formatPayment(
+                        $existingPayment
+                    ),
+                    'message' =>
+                        'A pending payment already exists for this order.',
+                ]);
+            }
+
+            $gatewayResponse = $this->gateway->initialize(
+                $existingPayment
+            );
+
+            $existingPayment->update([
+                'transaction_reference' =>
+                    $gatewayResponse['reference']
+                    ?? $existingPayment->transaction_reference,
+
+                'gateway_response' =>
+                    $gatewayResponse['raw'] ?? null,
+            ]);
+
+            $existingPayment->refresh();
+
             return response()->json([
-                'data' => $this->formatPayment($existingPayment),
-                'message' => 'A pending payment already exists for this order.',
+                'data' => $this->formatPayment(
+                    $existingPayment
+                ),
+
+                'payment' => [
+                    'authorization_url' =>
+                        $gatewayResponse['authorization_url']
+                        ?? null,
+
+                    'access_code' =>
+                        $gatewayResponse['access_code']
+                        ?? null,
+
+                    'reference' =>
+                        $gatewayResponse['reference']
+                        ?? $existingPayment->transaction_reference,
+                ],
+
+                'message' =>
+                    'Payment initialized successfully.',
             ]);
         }
 
         /*
-         * A successful payment means the order has already
-         * been paid. Do not create another payment.
+         * Never create another payment if the order has
+         * already been successfully paid.
          */
         $successfulPaymentExists = Payment::query()
             ->where('order_id', $order->id)
@@ -113,7 +177,10 @@ class PaymentController extends Controller
             ->where('status', 'successful')
             ->exists();
 
-        if ($successfulPaymentExists || $order->isPaid()) {
+        if (
+            $successfulPaymentExists
+            || $order->isPaid()
+        ) {
             throw ValidationException::withMessages([
                 'order_uuid' => [
                     'This order has already been paid.',
@@ -121,28 +188,86 @@ class PaymentController extends Controller
             ]);
         }
 
-        $payment = DB::transaction(function () use (
-            $order,
-            $user,
-            $validated
-        ) {
-            return Payment::create([
-                'order_id' => $order->id,
-                'user_id' => $user->id,
-                'gateway' => $validated['gateway'],
-                'transaction_reference' => null,
-                'status' => 'pending',
-                'currency' => $order->currency,
-                'amount' => $order->total,
-                'gateway_response' => null,
-                'paid_at' => null,
-                'failed_at' => null,
+        /*
+         * Create the local payment record first.
+         */
+        $payment = DB::transaction(
+            function () use (
+                $order,
+                $user,
+                $validated
+            ) {
+                return Payment::create([
+                    'order_id' => $order->id,
+                    'user_id' => $user->id,
+                    'gateway' => $validated['gateway'],
+                    'transaction_reference' => null,
+                    'status' => 'pending',
+                    'currency' => $order->currency,
+                    'amount' => $order->total,
+                    'gateway_response' => null,
+                    'paid_at' => null,
+                    'failed_at' => null,
+                ]);
+            }
+        );
+
+        /*
+         * Initialize the transaction with the actual
+         * payment gateway.
+         */
+        try {
+            $gatewayResponse = $this->gateway->initialize(
+                $payment
+            );
+        } catch (RuntimeException $exception) {
+            $payment->update([
+                'status' => 'failed',
+                'failed_at' => now(),
+                'gateway_response' => [
+                    'error' => $exception->getMessage(),
+                ],
             ]);
-        });
+
+            throw ValidationException::withMessages([
+                'gateway' => [
+                    $exception->getMessage(),
+                ],
+            ]);
+        }
+
+        /*
+         * Store the gateway reference and raw response.
+         */
+        $payment->update([
+            'transaction_reference' =>
+                $gatewayResponse['reference'] ?? null,
+
+            'gateway_response' =>
+                $gatewayResponse['raw'] ?? null,
+        ]);
+
+        $payment->refresh();
 
         return response()->json([
             'data' => $this->formatPayment($payment),
-            'message' => 'Payment initialized successfully.',
+
+            'payment' => [
+                'authorization_url' =>
+                    $gatewayResponse['authorization_url']
+                    ?? null,
+
+                'access_code' =>
+                    $gatewayResponse['access_code']
+                    ?? null,
+
+                'reference' =>
+                    $gatewayResponse['reference']
+                    ?? $payment->transaction_reference,
+            ],
+
+            'message' =>
+                'Payment initialized successfully.',
         ], 201);
     }
 
@@ -164,10 +289,7 @@ class PaymentController extends Controller
     }
 
     /**
-     * Verify a payment.
-     *
-     * Actual gateway verification will be implemented
-     * when the payment gateway service is connected.
+     * Verify a payment with the configured gateway.
      */
     public function verify(
         Request $request,
@@ -176,38 +298,267 @@ class PaymentController extends Controller
         $payment = Payment::query()
             ->where('uuid', $uuid)
             ->where('user_id', $request->user()->id)
+            ->with([
+                'order.items',
+            ])
             ->firstOrFail();
 
+        /*
+         * Do not process a successful payment twice.
+         */
         if ($payment->isSuccessful()) {
             return response()->json([
                 'data' => $this->formatPayment($payment),
-                'message' => 'Payment has already been verified successfully.',
+
+                'message' =>
+                    'Payment has already been verified successfully.',
             ]);
         }
 
+        try {
+            $result = $this->gateway->verify(
+                $payment
+            );
+        } catch (RuntimeException $exception) {
+            return response()->json([
+                'message' =>
+                    $exception->getMessage(),
+
+                'data' =>
+                    $this->formatPayment($payment),
+            ], 422);
+        }
+
+        /*
+         * Make sure the gateway returned the expected
+         * reference.
+         */
+        if (
+            ! empty($result['reference'])
+            && $payment->transaction_reference
+            && $result['reference']
+                !== $payment->transaction_reference
+        ) {
+            $payment->update([
+                'status' => 'failed',
+                'failed_at' => now(),
+                'gateway_response' => $result['raw'] ?? null,
+            ]);
+
+            return response()->json([
+                'message' =>
+                    'Payment reference verification failed.',
+
+                'data' =>
+                    $this->formatPayment($payment),
+            ], 422);
+        }
+
+        /*
+         * Verify the currency returned by the gateway.
+         */
+        if (
+            ! empty($result['currency'])
+            && strtoupper($result['currency'])
+                !== strtoupper($payment->currency)
+        ) {
+            $payment->update([
+                'status' => 'failed',
+                'failed_at' => now(),
+                'gateway_response' => $result['raw'] ?? null,
+            ]);
+
+            return response()->json([
+                'message' =>
+                    'Payment currency verification failed.',
+
+                'data' =>
+                    $this->formatPayment($payment),
+            ], 422);
+        }
+
+        /*
+         * Verify that the amount paid by the customer
+         * matches the order amount.
+         */
+        if ($result['amount'] !== null) {
+            $expectedAmount = round(
+                (float) $payment->amount,
+                2
+            );
+
+            $receivedAmount = round(
+                (float) $result['amount'],
+                2
+            );
+
+            if (
+                abs(
+                    $expectedAmount - $receivedAmount
+                ) > 0.01
+            ) {
+                $payment->update([
+                    'status' => 'failed',
+                    'failed_at' => now(),
+                    'gateway_response' =>
+                        $result['raw'] ?? null,
+                ]);
+
+                return response()->json([
+                    'message' =>
+                        'Payment amount verification failed.',
+
+                    'data' =>
+                        $this->formatPayment($payment),
+                ], 422);
+            }
+        }
+
+        /*
+         * Payment was not successful.
+         */
+        if (! ($result['successful'] ?? false)) {
+            $payment->update([
+                'status' => 'failed',
+                'failed_at' => now(),
+                'gateway_response' =>
+                    $result['raw'] ?? null,
+            ]);
+
+            return response()->json([
+                'message' =>
+                    'Payment was not successful.',
+
+                'data' =>
+                    $this->formatPayment(
+                        $payment->fresh()
+                    ),
+            ], 422);
+        }
+
+        /*
+         * The gateway confirms payment.
+         *
+         * Now atomically:
+         *
+         * 1. Mark payment successful.
+         * 2. Mark order paid.
+         * 3. Complete order.
+         * 4. Grant book entitlements.
+         */
+        DB::transaction(function () use (
+            $payment,
+            $result
+        ) {
+            $payment->update([
+                'status' => 'successful',
+
+                'transaction_reference' =>
+                    $result['reference']
+                    ?? $payment->transaction_reference,
+
+                'gateway_response' =>
+                    $result['raw'] ?? null,
+
+                'paid_at' => now(),
+
+                'failed_at' => null,
+            ]);
+
+            $order = $payment->order;
+
+            $order->update([
+                'payment_status' => 'paid',
+                'status' => 'completed',
+                'paid_at' => now(),
+            ]);
+
+            foreach ($order->items as $item) {
+                if (! $item->book_id) {
+                    continue;
+                }
+
+                BookEntitlement::firstOrCreate(
+                    [
+                        'user_id' =>
+                            $order->user_id,
+
+                        'book_id' =>
+                            $item->book_id,
+                    ],
+                    [
+                        'source' => 'purchase',
+                        'can_read' => true,
+                        'can_download' => true,
+                        'status' => 'active',
+                        'granted_at' => now(),
+                        'expires_at' => null,
+                    ]
+                );
+            }
+        });
+
+        $payment->refresh();
+
         return response()->json([
-            'message' => 'Payment gateway verification has not been configured yet.',
             'data' => $this->formatPayment($payment),
-        ], 501);
+
+            'order' => [
+                'uuid' =>
+                    $payment->order->uuid,
+
+                'status' =>
+                    $payment->order->status,
+
+                'payment_status' =>
+                    $payment->order->payment_status,
+
+                'paid_at' =>
+                    $payment->order->paid_at,
+            ],
+
+            'message' =>
+                'Payment verified successfully.',
+        ]);
     }
 
     /**
      * Format a payment for the customer-facing API.
      */
-    private function formatPayment(Payment $payment): array
-    {
+    private function formatPayment(
+        Payment $payment
+    ): array {
         return [
             'id' => $payment->id,
+
             'uuid' => $payment->uuid,
-            'order_id' => $payment->order_id,
-            'gateway' => $payment->gateway,
-            'transaction_reference' => $payment->transaction_reference,
-            'status' => $payment->status,
-            'currency' => $payment->currency,
-            'amount' => $payment->amount,
-            'paid_at' => $payment->paid_at,
-            'failed_at' => $payment->failed_at,
-            'created_at' => $payment->created_at,
+
+            'order_id' =>
+                $payment->order_id,
+
+            'gateway' =>
+                $payment->gateway,
+
+            'transaction_reference' =>
+                $payment->transaction_reference,
+
+            'status' =>
+                $payment->status,
+
+            'currency' =>
+                $payment->currency,
+
+            'amount' =>
+                $payment->amount,
+
+            'paid_at' =>
+                $payment->paid_at,
+
+            'failed_at' =>
+                $payment->failed_at,
+
+            'created_at' =>
+                $payment->created_at,
         ];
     }
 }

@@ -15,8 +15,10 @@ class BookmarkController extends Controller
      * Return the authenticated user's bookmarks
      * for a book they are entitled to read.
      */
-    public function index(Request $request, string $uuid): JsonResponse
-    {
+    public function index(
+        Request $request,
+        string $uuid
+    ): JsonResponse {
         $book = $this->findAccessibleBook($request, $uuid);
 
         $bookmarks = Bookmark::query()
@@ -27,32 +29,51 @@ class BookmarkController extends Controller
             ->get();
 
         return response()->json([
-            'data' => $bookmarks->map(function (Bookmark $bookmark) {
-                return [
-                    'id' => $bookmark->id,
-                    'current_page' => $bookmark->current_page,
-                    'location' => $bookmark->location,
-                    'label' => $bookmark->label,
-                    'note' => $bookmark->note,
-                    'created_at' => $bookmark->created_at,
-                    'updated_at' => $bookmark->updated_at,
-                ];
-            })->values(),
+            'data' => $bookmarks->map(
+                function (Bookmark $bookmark) {
+                    return [
+                        'id' => $bookmark->id,
+                        'current_page' => $bookmark->current_page,
+                        'location' => $bookmark->location,
+                        'label' => $bookmark->label,
+                        'note' => $bookmark->note,
+                        'created_at' => $bookmark->created_at,
+                        'updated_at' => $bookmark->updated_at,
+                    ];
+                }
+            )->values(),
         ]);
     }
 
     /**
      * Create a bookmark for the authenticated user.
      */
-    public function store(Request $request, string $uuid): JsonResponse
-    {
+    public function store(
+        Request $request,
+        string $uuid
+    ): JsonResponse {
         $book = $this->findAccessibleBook($request, $uuid);
 
         $validated = $request->validate([
-            'current_page' => ['required', 'integer', 'min:1'],
-            'location' => ['nullable', 'string', 'max:255'],
-            'label' => ['nullable', 'string', 'max:255'],
-            'note' => ['nullable', 'string'],
+            'current_page' => [
+                'required',
+                'integer',
+                'min:1',
+            ],
+            'location' => [
+                'nullable',
+                'string',
+                'max:255',
+            ],
+            'label' => [
+                'nullable',
+                'string',
+                'max:255',
+            ],
+            'note' => [
+                'nullable',
+                'string',
+            ],
         ]);
 
         $bookmark = Bookmark::create([
@@ -74,7 +95,7 @@ class BookmarkController extends Controller
                 'created_at' => $bookmark->created_at,
                 'updated_at' => $bookmark->updated_at,
             ],
-        ], 201);
+        ], Response::HTTP_CREATED);
     }
 
     /**
@@ -113,6 +134,9 @@ class BookmarkController extends Controller
 
         $hasEntitlement = $book->entitlements()
             ->where('user_id', $request->user()->id)
+            ->where('status', 'active')
+            ->where('can_read', true)
+            ->whereNull('revoked_at')
             ->where(function ($query) {
                 $query
                     ->whereNull('expires_at')
@@ -120,7 +144,11 @@ class BookmarkController extends Controller
             })
             ->exists();
 
-        abort_unless($hasEntitlement, 403);
+        abort_unless(
+            $hasEntitlement,
+            Response::HTTP_FORBIDDEN,
+            'You do not have access to this book.'
+        );
 
         return $book;
     }
