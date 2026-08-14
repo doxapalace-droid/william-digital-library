@@ -15,253 +15,234 @@ use Illuminate\Validation\Rule;
 class BookController extends Controller
 {
     /**
- * Display a paginated listing of published books.
- */
+     * Display a paginated listing of published books.
+     */
     public function index(Request $request): JsonResponse
     {
-    /*
-    |--------------------------------------------------------------------------
-    | Validate catalogue filters
-    |--------------------------------------------------------------------------
-    */
+        /*
+        |--------------------------------------------------------------------------
+        | Validate catalogue filters
+        |--------------------------------------------------------------------------
+        */
 
-    $validated = $request->validate([
-        'search' => [
-            'nullable',
-            'string',
-            'max:255',
-        ],
+        $validated = $request->validate([
+            'search' => [
+                'nullable',
+                'string',
+                'max:255',
+            ],
 
-        'category' => [
-            'nullable',
-            'string',
-            'max:255',
-        ],
+            'category' => [
+                'nullable',
+                'string',
+                'max:255',
+            ],
 
-        'author' => [
-            'nullable',
-            'string',
-            'max:255',
-        ],
+            'author' => [
+                'nullable',
+                'string',
+                'max:255',
+            ],
 
-        'featured' => [
-            'nullable',
-            'boolean',
-        ],
+            'featured' => [
+                'nullable',
+                'boolean',
+            ],
 
-        'sort' => [
-            'nullable',
-            Rule::in([
-                'newest',
-                'oldest',
-                'title_asc',
-                'title_desc',
-                'price_asc',
-                'price_desc',
-            ]),
-        ],
+            'sort' => [
+                'nullable',
+                Rule::in([
+                    'newest',
+                    'oldest',
+                    'title_asc',
+                    'title_desc',
+                    'price_asc',
+                    'price_desc',
+                ]),
+            ],
 
-        'per_page' => [
-            'nullable',
-            'integer',
-            'min:1',
-            'max:50',
-        ],
-    ]);
-
-    /*
-    |--------------------------------------------------------------------------
-    | Build public catalogue query
-    |--------------------------------------------------------------------------
-    */
-
-    $books = Book::query()
-        ->with([
-            'authors:id,uuid,name,slug',
-            'categories:id,uuid,name,slug',
-        ])
-        ->where('is_published', true)
+            'per_page' => [
+                'nullable',
+                'integer',
+                'min:1',
+                'max:50',
+            ],
+        ]);
 
         /*
         |--------------------------------------------------------------------------
-        | Search
+        | Build public catalogue query
         |--------------------------------------------------------------------------
-        |
-        | Searches:
-        | - title
-        | - subtitle
-        | - legacy author field
-        | - related authors
-        | - description
-        |
         */
 
-        ->when(
-            !empty($validated['search']),
-            function ($query) use ($validated) {
-                $search = $validated['search'];
+        $books = Book::query()
+            ->with([
+                'authors:id,uuid,name,slug',
+                'categories:id,uuid,name,slug',
+            ])
+            ->where('is_published', true)
 
-                $query->where(function ($searchQuery) use ($search) {
-                    $searchQuery
-                        ->where('title', 'like', "%{$search}%")
-                        ->orWhere('subtitle', 'like', "%{$search}%")
-                        ->orWhere('author', 'like', "%{$search}%")
-                        ->orWhere('description', 'like', "%{$search}%")
-                        ->orWhereHas(
-                            'authors',
-                            function ($authorQuery) use ($search) {
-                                $authorQuery->where(
-                                    'authors.name',
-                                    'like',
-                                    "%{$search}%"
+            /*
+            |--------------------------------------------------------------------------
+            | Search
+            |--------------------------------------------------------------------------
+            */
+
+            ->when(
+                !empty($validated['search']),
+                function ($query) use ($validated) {
+                    $search = $validated['search'];
+
+                    $query->where(function ($searchQuery) use ($search) {
+                        $searchQuery
+                            ->where('title', 'like', "%{$search}%")
+                            ->orWhere('subtitle', 'like', "%{$search}%")
+                            ->orWhere('description', 'like', "%{$search}%")
+                            ->orWhereHas(
+                                'authors',
+                                function ($authorQuery) use ($search) {
+                                    $authorQuery->where(
+                                        'authors.name',
+                                        'like',
+                                        "%{$search}%"
+                                    );
+                                }
+                            );
+                    });
+                }
+            )
+
+            /*
+            |--------------------------------------------------------------------------
+            | Category filter
+            |--------------------------------------------------------------------------
+            */
+
+            ->when(
+                !empty($validated['category']),
+                function ($query) use ($validated) {
+                    $query->whereHas(
+                        'categories',
+                        function ($categoryQuery) use ($validated) {
+                            $categoryQuery
+                                ->where(
+                                    'categories.slug',
+                                    $validated['category']
+                                )
+                                ->where(
+                                    'categories.is_active',
+                                    true
                                 );
-                            }
-                        );
-                });
-            }
-        )
+                        }
+                    );
+                }
+            )
+
+            /*
+            |--------------------------------------------------------------------------
+            | Author filter
+            |--------------------------------------------------------------------------
+            */
+
+            ->when(
+                !empty($validated['author']),
+                function ($query) use ($validated) {
+                    $query->whereHas(
+                        'authors',
+                        function ($authorQuery) use ($validated) {
+                            $authorQuery
+                                ->where(
+                                    'authors.slug',
+                                    $validated['author']
+                                )
+                                ->where(
+                                    'authors.is_active',
+                                    true
+                                );
+                        }
+                    );
+                }
+            )
+
+            /*
+            |--------------------------------------------------------------------------
+            | Featured filter
+            |--------------------------------------------------------------------------
+            */
+
+            ->when(
+                $request->boolean('featured'),
+                fn ($query) => $query->where('is_featured', true)
+            );
 
         /*
         |--------------------------------------------------------------------------
-        | Category filter
-        |--------------------------------------------------------------------------
-        |
-        | Example:
-        | /api/books?category=christian-living
-        |
-        */
-
-        ->when(
-            !empty($validated['category']),
-            function ($query) use ($validated) {
-                $query->whereHas(
-                    'categories',
-                    function ($categoryQuery) use ($validated) {
-                        $categoryQuery
-                            ->where(
-                                'categories.slug',
-                                $validated['category']
-                            )
-                            ->where('categories.is_active', true);
-                    }
-                );
-            }
-        )
-
-        /*
-        |--------------------------------------------------------------------------
-        | Author filter
-        |--------------------------------------------------------------------------
-        |
-        | Example:
-        | /api/books?author=william-k-danquah
-        |
-        */
-
-        ->when(
-            !empty($validated['author']),
-            function ($query) use ($validated) {
-                $query->whereHas(
-                    'authors',
-                    function ($authorQuery) use ($validated) {
-                        $authorQuery
-                            ->where(
-                                'authors.slug',
-                                $validated['author']
-                            )
-                            ->where('authors.is_active', true);
-                    }
-                );
-            }
-        )
-
-        /*
-        |--------------------------------------------------------------------------
-        | Featured filter
+        | Sorting
         |--------------------------------------------------------------------------
         */
 
-        ->when(
-            $request->boolean('featured'),
-            fn ($query) => $query->where('is_featured', true)
-        );
+        $sort = $validated['sort'] ?? 'newest';
 
-    /*
-    |--------------------------------------------------------------------------
-    | Sorting
-    |--------------------------------------------------------------------------
-    */
+        match ($sort) {
+            'oldest' => $books
+                ->orderBy('published_at')
+                ->orderBy('id'),
 
-    $sort = $validated['sort'] ?? 'newest';
+            'title_asc' => $books
+                ->orderBy('title')
+                ->orderBy('id'),
 
-    match ($sort) {
-        'oldest' => $books
-            ->orderBy('published_at')
-            ->orderBy('id'),
+            'title_desc' => $books
+                ->orderByDesc('title')
+                ->orderBy('id'),
 
-        'title_asc' => $books
-            ->orderBy('title')
-            ->orderBy('id'),
+            'price_asc' => $books
+                ->orderBy('price')
+                ->orderBy('id'),
 
-        'title_desc' => $books
-            ->orderByDesc('title')
-            ->orderBy('id'),
+            'price_desc' => $books
+                ->orderByDesc('price')
+                ->orderBy('id'),
 
-        'price_asc' => $books
-            ->orderBy('price')
-            ->orderBy('id'),
-
-        'price_desc' => $books
-            ->orderByDesc('price')
-            ->orderBy('id'),
-
-        default => $books
-            ->orderByDesc('published_at')
+            default => $books
+                ->orderByDesc('published_at')
                 ->orderByDesc('id'),
-     };
+        };
 
-    /*
-    |--------------------------------------------------------------------------
-    | Pagination
-    |--------------------------------------------------------------------------
-    */
+        /*
+        |--------------------------------------------------------------------------
+        | Pagination
+        |--------------------------------------------------------------------------
+        */
 
-    $perPage = $validated['per_page'] ?? 12;
+        $perPage = $validated['per_page'] ?? 12;
 
-    $books = $books
-        ->paginate($perPage)
-        ->withQueryString();
+        $books = $books
+            ->paginate($perPage)
+            ->withQueryString();
 
-    /*
-    |--------------------------------------------------------------------------
-    | Response
-    |--------------------------------------------------------------------------
-    */
+        /*
+        |--------------------------------------------------------------------------
+        | Response
+        |--------------------------------------------------------------------------
+        */
 
-    return response()->json([
-        'data' => $books->items(),
+        return response()->json([
+            'data' => $books->items(),
 
-        'meta' => [
-            'current_page' => $books->currentPage(),
-            'last_page' => $books->lastPage(),
-            'per_page' => $books->perPage(),
-            'total' => $books->total(),
-            'from' => $books->firstItem(),
-            'to' => $books->lastItem(),
-        ],
-    ]);
+            'meta' => [
+                'current_page' => $books->currentPage(),
+                'last_page' => $books->lastPage(),
+                'per_page' => $books->perPage(),
+                'total' => $books->total(),
+                'from' => $books->firstItem(),
+                'to' => $books->lastItem(),
+            ],
+        ]);
     }
 
     /**
      * Search published books.
-     *
-     * Supported query parameters:
-     *
-     * q
-     *     Search by title or author.
-     *
-     * category
-     *     Filter by category database ID.
      */
     public function search(Request $request): JsonResponse
     {
@@ -409,9 +390,6 @@ class BookController extends Controller
             |--------------------------------------------------------------------------
             | Legacy author field
             |--------------------------------------------------------------------------
-            |
-            | Kept for backwards compatibility.
-            |
             */
 
             'author' => [
@@ -422,14 +400,8 @@ class BookController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | New author relationship
+            | Author relationship
             |--------------------------------------------------------------------------
-            |
-            | Example:
-            |
-            | authors[] = 1
-            | authors[] = 2
-            |
             */
 
             'authors' => [
@@ -464,11 +436,23 @@ class BookController extends Controller
                 'size:3',
             ],
 
+            /*
+            |--------------------------------------------------------------------------
+            | Cover image
+            |--------------------------------------------------------------------------
+            */
+
             'cover_image' => [
                 'nullable',
                 'image',
                 'max:2048',
             ],
+
+            /*
+            |--------------------------------------------------------------------------
+            | Private PDF
+            |--------------------------------------------------------------------------
+            */
 
             'pdf' => [
                 'required',
@@ -549,10 +533,6 @@ class BookController extends Controller
         |--------------------------------------------------------------------------
         | Keep legacy author field synchronized
         |--------------------------------------------------------------------------
-        |
-        | If authors are supplied through the new relationship and the
-        | legacy author field is empty, populate it automatically.
-        |
         */
 
         if (
@@ -571,36 +551,63 @@ class BookController extends Controller
 
         /*
         |--------------------------------------------------------------------------
-        | Store PDF
+        | Store uploaded files
         |--------------------------------------------------------------------------
         */
 
-        $filename = Str::uuid() . '.pdf';
-
-        $request->file('pdf')->storeAs(
-            '',
-            $filename,
-            'books'
-        );
-
-        $validated['pdf_path'] = $filename;
-
-        /*
-        |--------------------------------------------------------------------------
-        | Never save uploaded file objects directly
-        |--------------------------------------------------------------------------
-        */
-
-        unset($validated['pdf']);
-        unset($validated['cover_image']);
-
-        /*
-        |--------------------------------------------------------------------------
-        | Create book and attach relationships
-        |--------------------------------------------------------------------------
-        */
+        $pdfPath = null;
+        $coverPath = null;
 
         try {
+            /*
+            |--------------------------------------------------------------------------
+            | Store private PDF
+            |--------------------------------------------------------------------------
+            */
+
+            $pdfFilename = Str::uuid() . '.pdf';
+
+            $request->file('pdf')->storeAs(
+                '',
+                $pdfFilename,
+                'books'
+            );
+
+            $pdfPath = $pdfFilename;
+
+            $validated['pdf_path'] = $pdfPath;
+
+            /*
+            |--------------------------------------------------------------------------
+            | Store cover image
+            |--------------------------------------------------------------------------
+            */
+
+            if ($request->hasFile('cover_image')) {
+                $coverExtension = $request
+                    ->file('cover_image')
+                    ->extension();
+
+                $coverFilename =
+                    Str::uuid() . '.' . $coverExtension;
+
+                $request->file('cover_image')->storeAs(
+                    'covers',
+                    $coverFilename,
+                    'books'
+                );
+
+                $coverPath = 'covers/' . $coverFilename;
+
+                $validated['cover_image'] = $coverPath;
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Create book and attach relationships
+            |--------------------------------------------------------------------------
+            */
+
             $book = DB::transaction(function () use (
                 $validated,
                 $categoryIds,
@@ -622,14 +629,26 @@ class BookController extends Controller
         } catch (\Throwable $exception) {
             /*
             |--------------------------------------------------------------------------
-            | Remove PDF if database operation fails
+            | Remove uploaded files if anything fails
             |--------------------------------------------------------------------------
             */
 
-            Storage::disk('books')->delete($filename);
+            if ($pdfPath) {
+                Storage::disk('books')->delete($pdfPath);
+            }
+
+            if ($coverPath) {
+                Storage::disk('books')->delete($coverPath);
+            }
 
             throw $exception;
         }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Response
+        |--------------------------------------------------------------------------
+        */
 
         return response()->json([
             'message' => 'Book created successfully.',
@@ -710,7 +729,7 @@ class BookController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | New author relationship
+            | Author relationship
             |--------------------------------------------------------------------------
             */
 
@@ -749,11 +768,23 @@ class BookController extends Controller
                 'size:3',
             ],
 
+            /*
+            |--------------------------------------------------------------------------
+            | Cover image
+            |--------------------------------------------------------------------------
+            */
+
             'cover_image' => [
                 'nullable',
                 'image',
                 'max:2048',
             ],
+
+            /*
+            |--------------------------------------------------------------------------
+            | Replacement PDF
+            |--------------------------------------------------------------------------
+            */
 
             'pdf' => [
                 'nullable',
@@ -865,41 +896,75 @@ class BookController extends Controller
 
         /*
         |--------------------------------------------------------------------------
-        | Replace PDF when supplied
+        | Existing file paths
         |--------------------------------------------------------------------------
         */
 
         $oldPdfPath = $book->pdf_path;
+        $oldCoverPath = $book->cover_image;
+
         $newPdfPath = null;
-
-        if ($request->hasFile('pdf')) {
-            $newPdfPath = Str::uuid() . '.pdf';
-
-            $request->file('pdf')->storeAs(
-                '',
-                $newPdfPath,
-                'books'
-            );
-
-            $validated['pdf_path'] = $newPdfPath;
-        }
+        $newCoverPath = null;
 
         /*
         |--------------------------------------------------------------------------
-        | Uploaded objects must not reach Eloquent
-        |--------------------------------------------------------------------------
-        */
-
-        unset($validated['pdf']);
-        unset($validated['cover_image']);
-
-        /*
-        |--------------------------------------------------------------------------
-        | Update book and relationships atomically
+        | Store replacement files
         |--------------------------------------------------------------------------
         */
 
         try {
+            /*
+            |--------------------------------------------------------------------------
+            | Replace PDF when supplied
+            |--------------------------------------------------------------------------
+            */
+
+            if ($request->hasFile('pdf')) {
+                $newPdfFilename = Str::uuid() . '.pdf';
+
+                $request->file('pdf')->storeAs(
+                    '',
+                    $newPdfFilename,
+                    'books'
+                );
+
+                $newPdfPath = $newPdfFilename;
+
+                $validated['pdf_path'] = $newPdfPath;
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Replace cover image when supplied
+            |--------------------------------------------------------------------------
+            */
+
+            if ($request->hasFile('cover_image')) {
+                $coverExtension = $request
+                    ->file('cover_image')
+                    ->extension();
+
+                $newCoverFilename =
+                    Str::uuid() . '.' . $coverExtension;
+
+                $request->file('cover_image')->storeAs(
+                    'covers',
+                    $newCoverFilename,
+                    'books'
+                );
+
+                $newCoverPath =
+                    'covers/' . $newCoverFilename;
+
+                $validated['cover_image'] = $newCoverPath;
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Update book and relationships atomically
+            |--------------------------------------------------------------------------
+            */
+
             DB::transaction(function () use (
                 $book,
                 $validated,
@@ -947,12 +1012,16 @@ class BookController extends Controller
         } catch (\Throwable $exception) {
             /*
             |--------------------------------------------------------------------------
-            | Remove newly uploaded PDF if database update fails
+            | Remove newly uploaded files if database update fails
             |--------------------------------------------------------------------------
             */
 
             if ($newPdfPath) {
                 Storage::disk('books')->delete($newPdfPath);
+            }
+
+            if ($newCoverPath) {
+                Storage::disk('books')->delete($newCoverPath);
             }
 
             throw $exception;
@@ -972,6 +1041,27 @@ class BookController extends Controller
         ) {
             Storage::disk('books')->delete($oldPdfPath);
         }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Delete old cover after successful database update
+        |--------------------------------------------------------------------------
+        */
+
+        if (
+            $newCoverPath &&
+            $oldCoverPath &&
+            $oldCoverPath !== $newCoverPath &&
+            Storage::disk('books')->exists($oldCoverPath)
+        ) {
+            Storage::disk('books')->delete($oldCoverPath);
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Response
+        |--------------------------------------------------------------------------
+        */
 
         return response()->json([
             'message' => 'Book updated successfully.',
@@ -998,8 +1088,8 @@ class BookController extends Controller
         | Soft delete only
         |--------------------------------------------------------------------------
         |
-        | The private PDF is intentionally retained so the book can
-        | potentially be restored later.
+        | The private PDF and cover are intentionally retained
+        | so the book can potentially be restored later.
         |
         */
 
