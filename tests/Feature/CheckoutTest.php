@@ -16,31 +16,33 @@ class CheckoutTest extends TestCase
 {
     use RefreshDatabase;
 
-
     /**
      * Guests cannot view checkout.
      */
     public function test_guest_cannot_view_checkout(): void
     {
-        $response = $this->getJson('/api/checkout');
+        $response = $this->getJson(
+            '/api/checkout'
+        );
 
         $response->assertUnauthorized();
     }
-
 
     /**
      * Guests cannot create checkout orders.
      */
     public function test_guest_cannot_create_checkout_order(): void
     {
-        $response = $this->postJson('/api/checkout');
+        $response = $this->postJson(
+            '/api/checkout'
+        );
 
         $response->assertUnauthorized();
     }
 
-
     /**
-     * Authenticated user cannot checkout with an empty cart.
+     * Authenticated user cannot checkout with
+     * an empty cart.
      */
     public function test_user_cannot_checkout_with_empty_cart(): void
     {
@@ -48,7 +50,9 @@ class CheckoutTest extends TestCase
 
         Sanctum::actingAs($user);
 
-        $response = $this->postJson('/api/checkout');
+        $response = $this->postJson(
+            '/api/checkout'
+        );
 
         $response
             ->assertUnprocessable()
@@ -56,9 +60,11 @@ class CheckoutTest extends TestCase
                 'cart',
             ]);
 
-        $this->assertDatabaseCount('orders', 0);
+        $this->assertDatabaseCount(
+            'orders',
+            0
+        );
     }
-
 
     /**
      * Authenticated user can view checkout summary.
@@ -84,14 +90,28 @@ class CheckoutTest extends TestCase
             'subtotal' => 20.00,
         ]);
 
-        $response = $this->getJson('/api/checkout');
+        $response = $this->getJson(
+            '/api/checkout'
+        );
 
         $response
             ->assertOk()
-            ->assertJsonPath('data.currency', 'USD')
-            ->assertJsonPath('data.subtotal', '20.00')
-            ->assertJsonPath('data.discount', '0.00')
-            ->assertJsonPath('data.total', '20.00');
+            ->assertJsonPath(
+                'data.currency',
+                'USD'
+            )
+            ->assertJsonPath(
+                'data.subtotal',
+                '20.00'
+            )
+            ->assertJsonPath(
+                'data.discount',
+                '0.00'
+            )
+            ->assertJsonPath(
+                'data.total',
+                '20.00'
+            );
 
         $this->assertCount(
             1,
@@ -99,9 +119,9 @@ class CheckoutTest extends TestCase
         );
     }
 
-
     /**
-     * User can create a pending order from their cart.
+     * User can create a pending order from
+     * their cart.
      */
     public function test_user_can_create_checkout_order(): void
     {
@@ -115,7 +135,7 @@ class CheckoutTest extends TestCase
             'currency' => 'USD',
         ]);
 
-        $cartItem = CartItem::create([
+        CartItem::create([
             'user_id' => $user->id,
             'book_id' => $book->id,
             'unit_price' => 20.00,
@@ -124,7 +144,9 @@ class CheckoutTest extends TestCase
             'subtotal' => 20.00,
         ]);
 
-        $response = $this->postJson('/api/checkout');
+        $response = $this->postJson(
+            '/api/checkout'
+        );
 
         $response
             ->assertCreated()
@@ -157,36 +179,91 @@ class CheckoutTest extends TestCase
                 '20.00'
             );
 
-        $this->assertDatabaseHas('orders', [
-            'user_id' => $user->id,
-            'status' => 'pending',
-            'payment_status' => 'unpaid',
-            'currency' => 'USD',
-            'subtotal' => 20.00,
-            'discount' => 0.00,
-            'total' => 20.00,
-        ]);
+        $this->assertDatabaseHas(
+            'orders',
+            [
+                'user_id' => $user->id,
+                'status' => 'pending',
+                'payment_status' => 'unpaid',
+                'currency' => 'USD',
+                'subtotal' => 20.00,
+                'discount' => 0.00,
+                'total' => 20.00,
+            ]
+        );
 
         $order = Order::first();
 
         $this->assertNotNull($order);
 
-        $this->assertDatabaseHas('order_items', [
-            'order_id' => $order->id,
+        $this->assertDatabaseHas(
+            'order_items',
+            [
+                'order_id' => $order->id,
+                'book_id' => $book->id,
+                'unit_price' => 20.00,
+                'currency' => 'USD',
+                'quantity' => 1,
+                'subtotal' => 20.00,
+            ]
+        );
+    }
+
+    /**
+     * Checkout clears the customer's cart after
+     * successfully creating the order.
+     */
+    public function test_successful_checkout_clears_cart(): void
+    {
+        $user = User::factory()->create();
+
+        Sanctum::actingAs($user);
+
+        $book = Book::factory()->create([
+            'is_published' => true,
+            'price' => 20.00,
+            'currency' => 'USD',
+        ]);
+
+        CartItem::create([
+            'user_id' => $user->id,
             'book_id' => $book->id,
             'unit_price' => 20.00,
             'currency' => 'USD',
             'quantity' => 1,
             'subtotal' => 20.00,
         ]);
+
+        $this->assertDatabaseCount(
+            'cart_items',
+            1
+        );
+
+        $response = $this->postJson(
+            '/api/checkout'
+        );
+
+        $response->assertCreated();
+
+        $this->assertDatabaseCount(
+            'orders',
+            1
+        );
+
+        $this->assertDatabaseCount(
+            'order_items',
+            1
+        );
+
+        $this->assertDatabaseCount(
+            'cart_items',
+            0
+        );
     }
 
-
     /**
-     * Checkout preserves the price captured in the cart.
-     *
-     * The current book price may have changed after
-     * the book was added to the cart.
+     * Checkout preserves the price captured
+     * in the cart.
      */
     public function test_checkout_uses_captured_cart_price(): void
     {
@@ -209,19 +286,29 @@ class CheckoutTest extends TestCase
             'subtotal' => 20.00,
         ]);
 
-        $response = $this->postJson('/api/checkout');
+        $response = $this->postJson(
+            '/api/checkout'
+        );
 
         $response
             ->assertCreated()
-            ->assertJsonPath('data.subtotal', '20.00')
-            ->assertJsonPath('data.total', '20.00');
+            ->assertJsonPath(
+                'data.subtotal',
+                '20.00'
+            )
+            ->assertJsonPath(
+                'data.total',
+                '20.00'
+            );
 
-        $this->assertDatabaseHas('order_items', [
-            'unit_price' => 20.00,
-            'subtotal' => 20.00,
-        ]);
+        $this->assertDatabaseHas(
+            'order_items',
+            [
+                'unit_price' => 20.00,
+                'subtotal' => 20.00,
+            ]
+        );
     }
-
 
     /**
      * Unpublished books cannot be checked out.
@@ -247,7 +334,9 @@ class CheckoutTest extends TestCase
             'subtotal' => 20.00,
         ]);
 
-        $response = $this->postJson('/api/checkout');
+        $response = $this->postJson(
+            '/api/checkout'
+        );
 
         $response
             ->assertUnprocessable()
@@ -255,13 +344,28 @@ class CheckoutTest extends TestCase
                 'cart',
             ]);
 
-        $this->assertDatabaseCount('orders', 0);
-        $this->assertDatabaseCount('order_items', 0);
+        $this->assertDatabaseCount(
+            'orders',
+            0
+        );
+
+        $this->assertDatabaseCount(
+            'order_items',
+            0
+        );
+
+        /*
+         * The cart must remain because checkout failed.
+         */
+        $this->assertDatabaseCount(
+            'cart_items',
+            1
+        );
     }
 
-
     /**
-     * A customer cannot checkout a book they already own.
+     * A customer cannot checkout a book
+     * they already own.
      */
     public function test_owned_book_cannot_be_checked_out(): void
     {
@@ -293,7 +397,9 @@ class CheckoutTest extends TestCase
             'subtotal' => 20.00,
         ]);
 
-        $response = $this->postJson('/api/checkout');
+        $response = $this->postJson(
+            '/api/checkout'
+        );
 
         $response
             ->assertUnprocessable()
@@ -301,9 +407,16 @@ class CheckoutTest extends TestCase
                 'cart',
             ]);
 
-        $this->assertDatabaseCount('orders', 0);
-    }
+        $this->assertDatabaseCount(
+            'orders',
+            0
+        );
 
+        $this->assertDatabaseCount(
+            'cart_items',
+            1
+        );
+    }
 
     /**
      * Expired entitlement does not prevent checkout.
@@ -338,13 +451,22 @@ class CheckoutTest extends TestCase
             'subtotal' => 20.00,
         ]);
 
-        $response = $this->postJson('/api/checkout');
+        $response = $this->postJson(
+            '/api/checkout'
+        );
 
         $response->assertCreated();
 
-        $this->assertDatabaseCount('orders', 1);
-    }
+        $this->assertDatabaseCount(
+            'orders',
+            1
+        );
 
+        $this->assertDatabaseCount(
+            'cart_items',
+            0
+        );
+    }
 
     /**
      * Revoked entitlement does not prevent checkout.
@@ -379,13 +501,22 @@ class CheckoutTest extends TestCase
             'subtotal' => 20.00,
         ]);
 
-        $response = $this->postJson('/api/checkout');
+        $response = $this->postJson(
+            '/api/checkout'
+        );
 
         $response->assertCreated();
 
-        $this->assertDatabaseCount('orders', 1);
-    }
+        $this->assertDatabaseCount(
+            'orders',
+            1
+        );
 
+        $this->assertDatabaseCount(
+            'cart_items',
+            0
+        );
+    }
 
     /**
      * Inactive entitlement does not prevent checkout.
@@ -420,13 +551,22 @@ class CheckoutTest extends TestCase
             'subtotal' => 20.00,
         ]);
 
-        $response = $this->postJson('/api/checkout');
+        $response = $this->postJson(
+            '/api/checkout'
+        );
 
         $response->assertCreated();
 
-        $this->assertDatabaseCount('orders', 1);
-    }
+        $this->assertDatabaseCount(
+            'orders',
+            1
+        );
 
+        $this->assertDatabaseCount(
+            'cart_items',
+            0
+        );
+    }
 
     /**
      * User can only checkout their own cart.
@@ -454,7 +594,9 @@ class CheckoutTest extends TestCase
             'subtotal' => 20.00,
         ]);
 
-        $response = $this->postJson('/api/checkout');
+        $response = $this->postJson(
+            '/api/checkout'
+        );
 
         $response
             ->assertUnprocessable()
@@ -462,12 +604,22 @@ class CheckoutTest extends TestCase
                 'cart',
             ]);
 
-        $this->assertDatabaseCount('orders', 0);
+        $this->assertDatabaseCount(
+            'orders',
+            0
+        );
+
+        /*
+         * The other customer's cart must remain untouched.
+         */
+        $this->assertDatabaseCount(
+            'cart_items',
+            1
+        );
     }
 
-
     /**
-     * Multiple cart items are converted into multiple order items.
+     * Multiple cart items create multiple order items.
      */
     public function test_multiple_cart_items_create_multiple_order_items(): void
     {
@@ -505,17 +657,36 @@ class CheckoutTest extends TestCase
             'subtotal' => 30.00,
         ]);
 
-        $response = $this->postJson('/api/checkout');
+        $response = $this->postJson(
+            '/api/checkout'
+        );
 
         $response
             ->assertCreated()
-            ->assertJsonPath('data.subtotal', '50.00')
-            ->assertJsonPath('data.total', '50.00');
+            ->assertJsonPath(
+                'data.subtotal',
+                '50.00'
+            )
+            ->assertJsonPath(
+                'data.total',
+                '50.00'
+            );
 
-        $this->assertDatabaseCount('orders', 1);
-        $this->assertDatabaseCount('order_items', 2);
+        $this->assertDatabaseCount(
+            'orders',
+            1
+        );
+
+        $this->assertDatabaseCount(
+            'order_items',
+            2
+        );
+
+        $this->assertDatabaseCount(
+            'cart_items',
+            0
+        );
     }
-
 
     /**
      * Checkout does not mark the order as paid.
@@ -541,18 +712,29 @@ class CheckoutTest extends TestCase
             'subtotal' => 20.00,
         ]);
 
-        $response = $this->postJson('/api/checkout');
+        $response = $this->postJson(
+            '/api/checkout'
+        );
 
         $response
             ->assertCreated()
-            ->assertJsonPath('data.payment_status', 'unpaid')
-            ->assertJsonPath('data.status', 'pending');
+            ->assertJsonPath(
+                'data.payment_status',
+                'unpaid'
+            )
+            ->assertJsonPath(
+                'data.status',
+                'pending'
+            );
 
-        $this->assertDatabaseHas('orders', [
-            'user_id' => $user->id,
-            'payment_status' => 'unpaid',
-            'status' => 'pending',
-            'paid_at' => null,
-        ]);
+        $this->assertDatabaseHas(
+            'orders',
+            [
+                'user_id' => $user->id,
+                'payment_status' => 'unpaid',
+                'status' => 'pending',
+                'paid_at' => null,
+            ]
+        );
     }
 }

@@ -15,54 +15,75 @@ use Illuminate\Validation\ValidationException;
 class CheckoutController extends Controller
 {
     /**
- * Display the authenticated user's checkout summary.
- *
- * This does not create an order.
- */
-public function index(Request $request): JsonResponse
-{
-    $user = $request->user();
+     * Display the authenticated user's checkout summary.
+     *
+     * This does not create an order.
+     */
+    public function index(Request $request): JsonResponse
+    {
+        $user = $request->user();
 
-    $cartItems = $this->getValidCartItems($user->id);
+        $cartItems = $this->getValidCartItems($user->id);
 
-    if ($cartItems->isEmpty()) {
+        if ($cartItems->isEmpty()) {
+            return response()->json([
+                'message' => 'Your cart is empty.',
+                'data' => [
+                    'items' => [],
+                    'currency' => null,
+                    'subtotal' => 0.00,
+                    'discount' => 0.00,
+                    'total' => 0.00,
+                ],
+            ], 422);
+        }
+
+        $this->ensureSingleCurrency($cartItems);
+
+        $subtotal = $this->calculateSubtotal($cartItems);
+
         return response()->json([
-            'message' => 'Your cart is empty.',
             'data' => [
-                'items' => [],
-                'currency' => null,
-                'subtotal' => 0.00,
-                'discount' => 0.00,
-                'total' => 0.00,
+                'items' => $cartItems
+                    ->map(
+                        fn (CartItem $item) =>
+                        $this->formatCartItem($item)
+                    )
+                    ->values(),
+
+                'currency' => $cartItems->first()->currency,
+
+                'subtotal' => number_format(
+                    $subtotal,
+                    2,
+                    '.',
+                    ''
+                ),
+
+                'discount' => number_format(
+                    0,
+                    2,
+                    '.',
+                    ''
+                ),
+
+                'total' => number_format(
+                    $subtotal,
+                    2,
+                    '.',
+                    ''
+                ),
             ],
-        ], 422);
-    }
-
-    $this->ensureSingleCurrency($cartItems);
-
-    $subtotal = $this->calculateSubtotal($cartItems);
-
-    return response()->json([
-        'data' => [
-            'items' => $cartItems
-                ->map(fn (CartItem $item) => $this->formatCartItem($item))
-                ->values(),
-
-            'currency' => $cartItems->first()->currency,
-
-            'subtotal' => number_format($subtotal, 2, '.', ''),
-
-            'discount' => number_format(0, 2, '.', ''),
-
-            'total' => number_format($subtotal, 2, '.', ''),
-        ],
-    ]);
+        ]);
     }
 
     /**
      * Create a pending order from the authenticated user's cart.
      *
      * Payment is NOT processed here.
+     *
+     * The cart is cleared only after the order and all
+     * order items have been created successfully.
      */
     public function store(Request $request): JsonResponse
     {
@@ -93,25 +114,34 @@ public function index(Request $request): JsonResponse
             $this->ensureSingleCurrency($cartItems);
 
             /*
-             * Make sure every book is still available
-             * and the customer still has the right to purchase it.
+             * Validate every cart item before creating
+             * the order.
              */
             foreach ($cartItems as $cartItem) {
-                $this->validateCartItem($cartItem, $user->id);
+                $this->validateCartItem(
+                    $cartItem,
+                    $user->id
+                );
             }
 
             /*
-             * Calculate the order totals from the
+             * Calculate the order subtotal from the
              * captured cart prices.
-             *
-             * We deliberately use unit_price from the
-             * cart rather than the current book price.
              */
-            $subtotal = $this->calculateSubtotal($cartItems);
+            $subtotal = $this->calculateSubtotal(
+                $cartItems
+            );
 
+            /*
+             * Discounts will be introduced later when
+             * coupons and discount functionality are built.
+             */
             $discount = 0.00;
 
-            $total = round($subtotal - $discount, 2);
+            $total = round(
+                $subtotal - $discount,
+                2
+            );
 
             /*
              * Create the pending order.
@@ -121,7 +151,9 @@ public function index(Request $request): JsonResponse
                 'order_number' => $this->generateOrderNumber(),
                 'status' => 'pending',
                 'payment_status' => 'unpaid',
-                'currency' => $cartItems->first()->currency,
+                'currency' => strtoupper(
+                    $cartItems->first()->currency
+                ),
                 'subtotal' => $subtotal,
                 'discount' => $discount,
                 'total' => $total,
@@ -131,18 +163,34 @@ public function index(Request $request): JsonResponse
             /*
              * Convert every cart item into an order item.
              *
-             * Order items preserve the price at checkout.
+             * Order items preserve the price that existed
+             * in the customer's cart at checkout.
              */
             foreach ($cartItems as $cartItem) {
                 OrderItem::create([
                     'order_id' => $order->id,
                     'book_id' => $cartItem->book_id,
                     'unit_price' => $cartItem->unit_price,
-                    'currency' => $cartItem->currency,
+                    'currency' => strtoupper(
+                        $cartItem->currency
+                    ),
                     'quantity' => $cartItem->quantity,
                     'subtotal' => $cartItem->subtotal,
                 ]);
             }
+
+            /*
+             * IMPORTANT:
+             *
+             * Clear the cart only after the order and
+             * order items have been successfully created.
+             *
+             * If anything above fails, the transaction
+             * rolls back and the customer's cart remains.
+             */
+            CartItem::query()
+                ->where('user_id', $user->id)
+                ->delete();
 
             /*
              * Load the relationships required by the
@@ -161,9 +209,8 @@ public function index(Request $request): JsonResponse
         ], 201);
     }
 
-
     /**
-     * Retrieve the user's cart items together with their books.
+     * Retrieve the authenticated user's cart items.
      */
     private function getValidCartItems(int $userId)
     {
@@ -175,7 +222,6 @@ public function index(Request $request): JsonResponse
             ->orderBy('created_at')
             ->get();
     }
-
 
     /**
      * Validate an individual cart item before checkout.
@@ -200,7 +246,7 @@ public function index(Request $request): JsonResponse
 
         /*
          * A customer cannot purchase a book they
-         * already own.
+         * already own through an active entitlement.
          */
         $alreadyOwnsBook = BookEntitlement::query()
             ->where('user_id', $userId)
@@ -211,7 +257,11 @@ public function index(Request $request): JsonResponse
             ->where(function ($query) {
                 $query
                     ->whereNull('expires_at')
-                    ->orWhere('expires_at', '>', now());
+                    ->orWhere(
+                        'expires_at',
+                        '>',
+                        now()
+                    );
             })
             ->exists();
 
@@ -224,7 +274,7 @@ public function index(Request $request): JsonResponse
         }
 
         /*
-         * Make sure the cart item has a valid quantity.
+         * Quantity must always be at least one.
          */
         if ($cartItem->quantity < 1) {
             throw ValidationException::withMessages([
@@ -235,7 +285,7 @@ public function index(Request $request): JsonResponse
         }
 
         /*
-         * Make sure the captured price is valid.
+         * Captured cart price cannot be negative.
          */
         if ((float) $cartItem->unit_price < 0) {
             throw ValidationException::withMessages([
@@ -244,8 +294,18 @@ public function index(Request $request): JsonResponse
                 ],
             ]);
         }
-    }
 
+        /*
+         * Currency must be present.
+         */
+        if (! $cartItem->currency) {
+            throw ValidationException::withMessages([
+                'cart' => [
+                    "Invalid currency for '{$book->title}'.",
+                ],
+            ]);
+        }
+    }
 
     /**
      * Ensure all cart items use one currency.
@@ -255,7 +315,10 @@ public function index(Request $request): JsonResponse
         $currencies = $cartItems
             ->pluck('currency')
             ->filter()
-            ->map(fn ($currency) => strtoupper($currency))
+            ->map(
+                fn ($currency) =>
+                strtoupper(trim($currency))
+            )
             ->unique()
             ->values();
 
@@ -268,25 +331,26 @@ public function index(Request $request): JsonResponse
         }
     }
 
-
     /**
      * Calculate the cart subtotal.
      */
     private function calculateSubtotal($cartItems): float
     {
         return round(
-            $cartItems->sum(function (CartItem $item) {
-                return (float) $item->subtotal;
-            }),
+            $cartItems->sum(
+                function (CartItem $item) {
+                    return (float) $item->subtotal;
+                }
+            ),
             2
         );
     }
-
 
     /**
      * Generate a human-readable order number.
      *
      * Example:
+     *
      * DP-000001
      */
     private function generateOrderNumber(): string
@@ -302,7 +366,10 @@ public function index(Request $request): JsonResponse
             );
 
             $exists = Order::query()
-                ->where('order_number', $orderNumber)
+                ->where(
+                    'order_number',
+                    $orderNumber
+                )
                 ->exists();
 
             if ($exists) {
@@ -313,19 +380,19 @@ public function index(Request $request): JsonResponse
         return $orderNumber;
     }
 
-
     /**
      * Format a cart item for checkout.
      */
-    private function formatCartItem(CartItem $cartItem): array
-    {
+    private function formatCartItem(
+        CartItem $cartItem
+    ): array {
         $book = $cartItem->book;
 
         return [
             'id' => $cartItem->id,
             'uuid' => $cartItem->uuid,
 
-            'quantity' => $cartItem->quantity,
+            'quantity' => (int) $cartItem->quantity,
 
             'unit_price' => number_format(
                 (float) $cartItem->unit_price,
@@ -334,7 +401,9 @@ public function index(Request $request): JsonResponse
                 ''
             ),
 
-            'currency' => $cartItem->currency,
+            'currency' => strtoupper(
+                $cartItem->currency
+            ),
 
             'subtotal' => number_format(
                 (float) $cartItem->subtotal,
@@ -351,23 +420,27 @@ public function index(Request $request): JsonResponse
                 'subtitle' => $book->subtitle,
                 'author' => $book->author,
                 'cover_image' => $book->cover_image,
+
                 'price' => number_format(
                     (float) $book->price,
                     2,
                     '.',
                     ''
                 ),
-                'currency' => $book->currency,
+
+                'currency' => strtoupper(
+                    $book->currency
+                ),
             ],
         ];
     }
 
-
     /**
      * Format the created order for the API.
      */
-    private function formatOrder(Order $order): array
-    {
+    private function formatOrder(
+        Order $order
+    ): array {
         return [
             'id' => $order->id,
             'uuid' => $order->uuid,
@@ -376,7 +449,9 @@ public function index(Request $request): JsonResponse
             'status' => $order->status,
             'payment_status' => $order->payment_status,
 
-            'currency' => $order->currency,
+            'currency' => strtoupper(
+                $order->currency
+            ),
 
             'subtotal' => number_format(
                 (float) $order->subtotal,
@@ -402,39 +477,61 @@ public function index(Request $request): JsonResponse
             'paid_at' => $order->paid_at?->toISOString(),
 
             'items' => $order->items
-                ->map(function (OrderItem $item) {
-                    return [
-                        'id' => $item->id,
-                        'uuid' => $item->uuid,
-                        'quantity' => $item->quantity,
+                ->map(
+                    function (OrderItem $item) {
+                        return [
+                            'id' => $item->id,
+                            'uuid' => $item->uuid,
 
-                        'unit_price' => number_format(
-                            (float) $item->unit_price,
-                            2,
-                            '.',
-                            ''
-                        ),
+                            'quantity' =>
+                                (int) $item->quantity,
 
-                        'currency' => $item->currency,
+                            'unit_price' =>
+                                number_format(
+                                    (float) $item->unit_price,
+                                    2,
+                                    '.',
+                                    ''
+                                ),
 
-                        'subtotal' => number_format(
-                            (float) $item->subtotal,
-                            2,
-                            '.',
-                            ''
-                        ),
+                            'currency' =>
+                                strtoupper(
+                                    $item->currency
+                                ),
 
-                        'book' => [
-                            'id' => $item->book->id,
-                            'uuid' => $item->book->uuid,
-                            'title' => $item->book->title,
-                            'slug' => $item->book->slug,
-                            'subtitle' => $item->book->subtitle,
-                            'author' => $item->book->author,
-                            'cover_image' => $item->book->cover_image,
-                        ],
-                    ];
-                })
+                            'subtotal' =>
+                                number_format(
+                                    (float) $item->subtotal,
+                                    2,
+                                    '.',
+                                    ''
+                                ),
+
+                            'book' => [
+                                'id' =>
+                                    $item->book->id,
+
+                                'uuid' =>
+                                    $item->book->uuid,
+
+                                'title' =>
+                                    $item->book->title,
+
+                                'slug' =>
+                                    $item->book->slug,
+
+                                'subtitle' =>
+                                    $item->book->subtitle,
+
+                                'author' =>
+                                    $item->book->author,
+
+                                'cover_image' =>
+                                    $item->book->cover_image,
+                            ],
+                        ];
+                    }
+                )
                 ->values(),
         ];
     }
