@@ -1,24 +1,26 @@
 <?php
 
-use App\Http\Controllers\Api\PaymentController;
-use App\Http\Controllers\Api\CheckoutController;
-use App\Http\Controllers\Api\CartController;
-use App\Http\Controllers\Api\ReviewController;
-use App\Http\Controllers\Api\RecommendationController;
-use App\Http\Controllers\Api\RecentlyViewedController;
+use App\Http\Controllers\Api\AdminOrderController;
+use App\Http\Controllers\Api\AuthorController;
 use App\Http\Controllers\Api\BookController;
 use App\Http\Controllers\Api\BookDownloadController;
 use App\Http\Controllers\Api\BookReaderController;
 use App\Http\Controllers\Api\BookmarkController;
+use App\Http\Controllers\Api\CartController;
 use App\Http\Controllers\Api\CategoryController;
-use App\Http\Controllers\Api\AuthorController;
+use App\Http\Controllers\Api\CheckoutController;
 use App\Http\Controllers\Api\ContinueReadingController;
 use App\Http\Controllers\Api\FavoriteController;
 use App\Http\Controllers\Api\HighlightController;
 use App\Http\Controllers\Api\MyLibraryController;
+use App\Http\Controllers\Api\OrderController;
+use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ReaderPreferenceController;
 use App\Http\Controllers\Api\ReadingNoteController;
 use App\Http\Controllers\Api\ReadingProgressController;
+use App\Http\Controllers\Api\RecommendationController;
+use App\Http\Controllers\Api\RecentlyViewedController;
+use App\Http\Controllers\Api\ReviewController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -29,8 +31,6 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 |
 | These routes are available without authentication.
-| Only published books, active categories, and active authors should be
-| exposed by their respective controllers.
 |
 */
 
@@ -53,7 +53,7 @@ Route::get('/books', [
 |--------------------------------------------------------------------------
 |
 | IMPORTANT:
-| Keep this route BEFORE /books/{slug}.
+| Keep this route before /books/{slug}.
 |
 */
 
@@ -114,7 +114,10 @@ Route::get('/authors/{author}', [
 | Admin Routes
 |--------------------------------------------------------------------------
 |
-| These routes require authentication and the admin role.
+| These routes require:
+|
+| 1. Sanctum authentication
+| 2. Admin role
 |
 */
 
@@ -187,6 +190,37 @@ Route::middleware([
         AuthorController::class,
         'destroy',
     ]);
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Order Management
+    |--------------------------------------------------------------------------
+    |
+    | Administrators can:
+    |
+    | - View all orders
+    | - Search orders
+    | - Filter orders
+    | - View individual orders
+    | - Update order/payment status
+    |
+    */
+
+    Route::get('/orders', [
+        AdminOrderController::class,
+        'index',
+    ]);
+
+    Route::get('/orders/{uuid}', [
+        AdminOrderController::class,
+        'show',
+    ]);
+
+    Route::put('/orders/{uuid}', [
+        AdminOrderController::class,
+        'update',
+    ]);
 });
 
 
@@ -200,6 +234,26 @@ Route::middleware([
 */
 
 Route::middleware('auth:sanctum')->group(function () {
+
+    /*
+    |--------------------------------------------------------------------------
+    | Customer Orders
+    |--------------------------------------------------------------------------
+    |
+    | Customers can only access their own orders.
+    |
+    */
+
+    Route::get('/orders', [
+        OrderController::class,
+        'index',
+    ]);
+
+    Route::get('/orders/{uuid}', [
+        OrderController::class,
+        'show',
+    ]);
+
 
     /*
     |--------------------------------------------------------------------------
