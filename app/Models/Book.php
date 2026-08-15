@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Book extends Model
@@ -52,6 +53,14 @@ class Book extends Model
     {
         return $this->belongsToMany(Author::class)
             ->withTimestamps();
+    }
+
+    /**
+     * Audiobook edition associated with this book.
+     */
+    public function audiobook(): HasOne
+    {
+        return $this->hasOne(Audiobook::class);
     }
 
     /**
