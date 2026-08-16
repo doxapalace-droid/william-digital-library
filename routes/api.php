@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AdminOrderController;
 use App\Http\Controllers\Api\AuthorController;
+use App\Http\Controllers\Api\AudiobookStreamController;
 use App\Http\Controllers\Api\BookController;
 use App\Http\Controllers\Api\BookDownloadController;
 use App\Http\Controllers\Api\BookReaderController;
@@ -465,6 +466,30 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/books/{book}/download', [
         BookDownloadController::class,
         'download',
+    ]);
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Secure Audiobook Streaming
+    |--------------------------------------------------------------------------
+    |
+    | Only authenticated customers can reach this endpoint.
+    |
+    | AudiobookStreamController additionally verifies:
+    |
+    | - audiobook entitlement
+    | - active entitlement
+    | - streaming permission
+    | - audiobook status
+    | - chapter status
+    | - private audio file existence
+    |
+    */
+
+    Route::get('/audiobook-chapters/{chapter}/stream', [
+        AudiobookStreamController::class,
+        'stream',
     ]);
 
 

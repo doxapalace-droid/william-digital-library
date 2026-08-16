@@ -33,11 +33,11 @@ class AudiobookEntitlement extends Model
     protected function casts(): array
     {
         return [
-            'can_stream'   => 'boolean',
+            'can_stream' => 'boolean',
             'can_download' => 'boolean',
-            'granted_at'   => 'datetime',
-            'expires_at'   => 'datetime',
-            'revoked_at'   => 'datetime',
+            'granted_at' => 'datetime',
+            'expires_at' => 'datetime',
+            'revoked_at' => 'datetime',
         ];
     }
 
@@ -58,7 +58,7 @@ class AudiobookEntitlement extends Model
     }
 
     /**
-     * The audiobook this entitlement provides access to.
+     * The audiobook this entitlement belongs to.
      */
     public function audiobook(): BelongsTo
     {
@@ -66,7 +66,7 @@ class AudiobookEntitlement extends Model
     }
 
     /**
-     * Determine whether the entitlement is currently active.
+     * Determine whether the entitlement is active.
      */
     public function isActive(): bool
     {
@@ -94,7 +94,8 @@ class AudiobookEntitlement extends Model
      */
     public function canStream(): bool
     {
-        return $this->isActive() && $this->can_stream;
+        return $this->isActive()
+            && $this->can_stream;
     }
 
     /**
@@ -103,6 +104,7 @@ class AudiobookEntitlement extends Model
      */
     public function canDownload(): bool
     {
-        return $this->isActive() && $this->can_download;
+        return $this->isActive()
+            && $this->can_download;
     }
 }

@@ -57,6 +57,8 @@ class Audiobook extends Model
 
     /**
      * Chapters/tracks belonging to this audiobook.
+     *
+     * Chapters are automatically ordered by track number.
      */
     public function chapters(): HasMany
     {
@@ -65,7 +67,23 @@ class Audiobook extends Model
     }
 
     /**
+     * Entitlements granted for this audiobook.
+     *
+     * An entitlement determines whether a customer
+     * is allowed to access and stream this audiobook.
+     */
+    public function entitlements(): HasMany
+    {
+        return $this->hasMany(AudiobookEntitlement::class);
+    }
+
+    /**
      * Determine whether the audiobook is currently active.
+     *
+     * An audiobook is active only when:
+     *
+     * 1. Its status is active.
+     * 2. It is not scheduled for future publication.
      */
     public function isActive(): bool
     {
