@@ -1,7 +1,12 @@
 <?php
 
+use App\Http\Controllers\Api\AdminAudiobookChapterController;
+use App\Http\Controllers\Api\AdminAudiobookController;
 use App\Http\Controllers\Api\AdminOrderController;
 use App\Http\Controllers\Api\AuthorController;
+use App\Http\Controllers\Api\AudiobookChapterController;
+use App\Http\Controllers\Api\AudiobookController;
+use App\Http\Controllers\Api\AudiobookDownloadController;
 use App\Http\Controllers\Api\AudiobookListeningProgressController;
 use App\Http\Controllers\Api\AudiobookStreamController;
 use App\Http\Controllers\Api\BookController;
@@ -113,6 +118,59 @@ Route::get('/authors/{author}', [
 
 /*
 |--------------------------------------------------------------------------
+| Public Audiobook Catalogue
+|--------------------------------------------------------------------------
+|
+| These endpoints expose public audiobook metadata only.
+|
+| Private audio files are NEVER exposed through these routes.
+|
+*/
+
+
+/*
+|--------------------------------------------------------------------------
+| Public Audiobook Catalogue
+|--------------------------------------------------------------------------
+*/
+
+Route::get('/audiobooks', [
+    AudiobookController::class,
+    'index',
+]);
+
+
+/*
+|--------------------------------------------------------------------------
+| Public Audiobook Details
+|--------------------------------------------------------------------------
+*/
+
+Route::get('/audiobooks/{audiobook}', [
+    AudiobookController::class,
+    'show',
+]);
+
+
+/*
+|--------------------------------------------------------------------------
+| Public Audiobook Chapters
+|--------------------------------------------------------------------------
+|
+| Returns public chapter metadata only.
+|
+| The private audio_file path must never be exposed.
+|
+*/
+
+Route::get('/audiobooks/{audiobook}/chapters', [
+    AudiobookChapterController::class,
+    'index',
+]);
+
+
+/*
+|--------------------------------------------------------------------------
 | Admin Routes
 |--------------------------------------------------------------------------
 |
@@ -127,6 +185,7 @@ Route::middleware([
     'auth:sanctum',
     'role:admin',
 ])->prefix('admin')->group(function () {
+
 
     /*
     |--------------------------------------------------------------------------
@@ -196,6 +255,98 @@ Route::middleware([
 
     /*
     |--------------------------------------------------------------------------
+    | Admin Audiobook Management
+    |--------------------------------------------------------------------------
+    |
+    | Administrators can:
+    |
+    | - List audiobooks
+    | | - Create audiobooks
+    | - View audiobook details
+    | - Update audiobooks
+    | - Delete audiobooks
+    |
+    */
+
+    Route::get('/audiobooks', [
+        AdminAudiobookController::class,
+        'index',
+    ]);
+
+    Route::post('/audiobooks', [
+        AdminAudiobookController::class,
+        'store',
+    ]);
+
+    Route::get('/audiobooks/{audiobook}', [
+        AdminAudiobookController::class,
+        'show',
+    ]);
+
+    Route::put('/audiobooks/{audiobook}', [
+        AdminAudiobookController::class,
+        'update',
+    ]);
+
+    Route::patch('/audiobooks/{audiobook}', [
+        AdminAudiobookController::class,
+        'update',
+    ]);
+
+    Route::delete('/audiobooks/{audiobook}', [
+        AdminAudiobookController::class,
+        'destroy',
+    ]);
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Admin Audiobook Chapter Management
+    |--------------------------------------------------------------------------
+    |
+    | Administrators can:
+    |
+    | - List chapters
+    | - Create chapters
+    | - View individual chapters
+    | - Update chapters
+    | - Delete chapters
+    |
+    */
+
+    Route::get('/audiobooks/{audiobook}/chapters', [
+        AdminAudiobookChapterController::class,
+        'index',
+    ]);
+
+    Route::post('/audiobooks/{audiobook}/chapters', [
+        AdminAudiobookChapterController::class,
+        'store',
+    ]);
+
+    Route::get('/audiobooks/{audiobook}/chapters/{chapter}', [
+        AdminAudiobookChapterController::class,
+        'show',
+    ]);
+
+    Route::put('/audiobooks/{audiobook}/chapters/{chapter}', [
+        AdminAudiobookChapterController::class,
+        'update',
+    ]);
+
+    Route::patch('/audiobooks/{audiobook}/chapters/{chapter}', [
+        AdminAudiobookChapterController::class,
+        'update',
+    ]);
+
+    Route::delete('/audiobooks/{audiobook}/chapters/{chapter}', [
+        AdminAudiobookChapterController::class,
+        'destroy',
+    ]);
+
+
+    /*
+    |--------------------------------------------------------------------------
     | Order Management
     |--------------------------------------------------------------------------
     |
@@ -236,6 +387,18 @@ Route::middleware([
 */
 
 Route::middleware('auth:sanctum')->group(function () {
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Authenticated User Profile
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get('/user', function (Request $request) {
+        return $request->user();
+    });
+
 
     /*
     |--------------------------------------------------------------------------
@@ -362,17 +525,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | Authenticated User Profile
-    |--------------------------------------------------------------------------
-    */
-
-    Route::get('/user', function (Request $request) {
-        return $request->user();
-    });
-
-
-    /*
-    |--------------------------------------------------------------------------
     | Recently Viewed
     |--------------------------------------------------------------------------
     */
@@ -487,11 +639,30 @@ Route::middleware('auth:sanctum')->group(function () {
     | - Active chapter
     | - Private audio file verification
     |
+    | IMPORTANT:
+    | The route name is required by AudiobookChapterResource.
+    |
     */
 
     Route::get('/audiobook-chapters/{chapter}/stream', [
         AudiobookStreamController::class,
         'stream',
+    ])->name('audiobook-chapters.stream');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Audiobook Download
+    |--------------------------------------------------------------------------
+    |
+    | Download access is protected by audiobook entitlement
+    | and download permission.
+    |
+    */
+
+    Route::get('/audiobooks/{audiobook}/download', [
+        AudiobookDownloadController::class,
+        'download',
     ]);
 
 
@@ -502,14 +673,13 @@ Route::middleware('auth:sanctum')->group(function () {
     |
     | Customers can:
     |
-    | - Retrieve their saved listening position
-    | - Save/update listening position
+    | - Retrieve saved listening progress
+    | - Create listening progress
+    | - Update listening progress
     | - Save current chapter
+    | - Save playback position
     | - Save listened seconds
-    | - Track overall completion
-    |
-    | The controller verifies audiobook entitlement before
-    | returning or modifying progress.
+    | - Track audiobook completion
     |
     */
 
