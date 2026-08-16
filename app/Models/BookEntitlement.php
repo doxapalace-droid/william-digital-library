@@ -3,8 +3,8 @@
 namespace App\Models;
 
 use App\Traits\HasUuid;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class BookEntitlement extends Model
@@ -13,7 +13,7 @@ class BookEntitlement extends Model
     use HasUuid;
 
     /**
-     * The attributes that are mass assignable.
+     * Attributes that may be mass assigned.
      */
     protected $fillable = [
         'user_id',
@@ -33,11 +33,11 @@ class BookEntitlement extends Model
     protected function casts(): array
     {
         return [
-            'can_read'      => 'boolean',
-            'can_download'  => 'boolean',
-            'granted_at'    => 'datetime',
-            'expires_at'    => 'datetime',
-            'revoked_at'    => 'datetime',
+            'can_read' => 'boolean',
+            'can_download' => 'boolean',
+            'granted_at' => 'datetime',
+            'expires_at' => 'datetime',
+            'revoked_at' => 'datetime',
         ];
     }
 
@@ -70,7 +70,10 @@ class BookEntitlement extends Model
             return false;
         }
 
-        if ($this->expires_at !== null && $this->expires_at->isPast()) {
+        if (
+            $this->expires_at !== null
+            && $this->expires_at->isPast()
+        ) {
             return false;
         }
 
@@ -82,7 +85,8 @@ class BookEntitlement extends Model
      */
     public function canRead(): bool
     {
-        return $this->isActive() && $this->can_read;
+        return $this->isActive()
+            && $this->can_read;
     }
 
     /**
@@ -90,6 +94,7 @@ class BookEntitlement extends Model
      */
     public function canDownload(): bool
     {
-        return $this->isActive() && $this->can_download;
+        return $this->isActive()
+            && $this->can_download;
     }
 }

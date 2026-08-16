@@ -17,7 +17,9 @@ class OrderItem extends Model
      */
     protected $fillable = [
         'order_id',
+        'item_type',
         'book_id',
+        'audiobook_id',
         'unit_price',
         'currency',
         'quantity',
@@ -50,5 +52,29 @@ class OrderItem extends Model
     public function book(): BelongsTo
     {
         return $this->belongsTo(Book::class);
+    }
+
+    /**
+     * Audiobook being purchased.
+     */
+    public function audiobook(): BelongsTo
+    {
+        return $this->belongsTo(Audiobook::class);
+    }
+
+    /**
+     * Determine whether this order item is a book.
+     */
+    public function isBook(): bool
+    {
+        return $this->item_type === 'book';
+    }
+
+    /**
+     * Determine whether this order item is an audiobook.
+     */
+    public function isAudiobook(): bool
+    {
+        return $this->item_type === 'audiobook';
     }
 }

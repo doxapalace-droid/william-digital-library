@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AudiobookEntitlement;
 use App\Models\BookEntitlement;
 use App\Models\Order;
 use App\Models\Payment;
@@ -46,10 +47,6 @@ class PaymentController extends Controller
 
     /**
      * Initialize a payment for an unpaid order.
-     *
-     * This creates the local payment record and then
-     * initializes the transaction with the configured
-     * payment gateway.
      */
     public function store(Request $request): JsonResponse
     {
@@ -100,8 +97,7 @@ class PaymentController extends Controller
 
         /*
          * If a pending payment already exists for this
-         * order and gateway, return it instead of creating
-         * another payment.
+         * order and gateway, reuse it.
          */
         $existingPayment = Payment::query()
             ->where('order_id', $order->id)
@@ -112,25 +108,44 @@ class PaymentController extends Controller
             ->first();
 
         if ($existingPayment) {
+
             /*
-             * If the payment already has a reference,
-             * return it directly.
-             *
-             * Otherwise initialize it with the gateway.
+             * Already initialized.
              */
             if ($existingPayment->transaction_reference) {
                 return response()->json([
                     'data' => $this->formatPayment(
                         $existingPayment
                     ),
+
                     'message' =>
                         'A pending payment already exists for this order.',
                 ]);
             }
 
-            $gatewayResponse = $this->gateway->initialize(
-                $existingPayment
-            );
+            /*
+             * Pending record exists but has not yet
+             * received a gateway reference.
+             */
+            try {
+                $gatewayResponse = $this->gateway->initialize(
+                    $existingPayment
+                );
+            } catch (RuntimeException $exception) {
+                $existingPayment->update([
+                    'status' => 'failed',
+                    'failed_at' => now(),
+                    'gateway_response' => [
+                        'error' => $exception->getMessage(),
+                    ],
+                ]);
+
+                throw ValidationException::withMessages([
+                    'gateway' => [
+                        $exception->getMessage(),
+                    ],
+                ]);
+            }
 
             $existingPayment->update([
                 'transaction_reference' =>
@@ -168,8 +183,8 @@ class PaymentController extends Controller
         }
 
         /*
-         * Never create another payment if the order has
-         * already been successfully paid.
+         * Never create another payment if the order
+         * has already been successfully paid.
          */
         $successfulPaymentExists = Payment::query()
             ->where('order_id', $order->id)
@@ -203,7 +218,9 @@ class PaymentController extends Controller
                     'gateway' => $validated['gateway'],
                     'transaction_reference' => null,
                     'status' => 'pending',
-                    'currency' => $order->currency,
+                    'currency' => strtoupper(
+                        $order->currency
+                    ),
                     'amount' => $order->total,
                     'gateway_response' => null,
                     'paid_at' => null,
@@ -213,14 +230,15 @@ class PaymentController extends Controller
         );
 
         /*
-         * Initialize the transaction with the actual
-         * payment gateway.
+         * Initialize the transaction with the
+         * actual payment gateway.
          */
         try {
             $gatewayResponse = $this->gateway->initialize(
                 $payment
             );
         } catch (RuntimeException $exception) {
+
             $payment->update([
                 'status' => 'failed',
                 'failed_at' => now(),
@@ -237,7 +255,7 @@ class PaymentController extends Controller
         }
 
         /*
-         * Store the gateway reference and raw response.
+         * Store gateway reference and response.
          */
         $payment->update([
             'transaction_reference' =>
@@ -250,7 +268,9 @@ class PaymentController extends Controller
         $payment->refresh();
 
         return response()->json([
-            'data' => $this->formatPayment($payment),
+            'data' => $this->formatPayment(
+                $payment
+            ),
 
             'payment' => [
                 'authorization_url' =>
@@ -284,7 +304,9 @@ class PaymentController extends Controller
             ->firstOrFail();
 
         return response()->json([
-            'data' => $this->formatPayment($payment),
+            'data' => $this->formatPayment(
+                $payment
+            ),
         ]);
     }
 
@@ -299,7 +321,8 @@ class PaymentController extends Controller
             ->where('uuid', $uuid)
             ->where('user_id', $request->user()->id)
             ->with([
-                'order.items',
+                'order.items.book',
+                'order.items.audiobook.book',
             ])
             ->firstOrFail();
 
@@ -308,7 +331,9 @@ class PaymentController extends Controller
          */
         if ($payment->isSuccessful()) {
             return response()->json([
-                'data' => $this->formatPayment($payment),
+                'data' => $this->formatPayment(
+                    $payment
+                ),
 
                 'message' =>
                     'Payment has already been verified successfully.',
@@ -325,13 +350,14 @@ class PaymentController extends Controller
                     $exception->getMessage(),
 
                 'data' =>
-                    $this->formatPayment($payment),
+                    $this->formatPayment(
+                        $payment
+                    ),
             ], 422);
         }
 
         /*
-         * Make sure the gateway returned the expected
-         * reference.
+         * Verify the gateway reference.
          */
         if (
             ! empty($result['reference'])
@@ -342,7 +368,8 @@ class PaymentController extends Controller
             $payment->update([
                 'status' => 'failed',
                 'failed_at' => now(),
-                'gateway_response' => $result['raw'] ?? null,
+                'gateway_response' =>
+                    $result['raw'] ?? null,
             ]);
 
             return response()->json([
@@ -350,12 +377,14 @@ class PaymentController extends Controller
                     'Payment reference verification failed.',
 
                 'data' =>
-                    $this->formatPayment($payment),
+                    $this->formatPayment(
+                        $payment
+                    ),
             ], 422);
         }
 
         /*
-         * Verify the currency returned by the gateway.
+         * Verify currency.
          */
         if (
             ! empty($result['currency'])
@@ -365,7 +394,8 @@ class PaymentController extends Controller
             $payment->update([
                 'status' => 'failed',
                 'failed_at' => now(),
-                'gateway_response' => $result['raw'] ?? null,
+                'gateway_response' =>
+                    $result['raw'] ?? null,
             ]);
 
             return response()->json([
@@ -373,13 +403,14 @@ class PaymentController extends Controller
                     'Payment currency verification failed.',
 
                 'data' =>
-                    $this->formatPayment($payment),
+                    $this->formatPayment(
+                        $payment
+                    ),
             ], 422);
         }
 
         /*
-         * Verify that the amount paid by the customer
-         * matches the order amount.
+         * Verify payment amount.
          */
         if ($result['amount'] !== null) {
             $expectedAmount = round(
@@ -409,7 +440,9 @@ class PaymentController extends Controller
                         'Payment amount verification failed.',
 
                     'data' =>
-                        $this->formatPayment($payment),
+                        $this->formatPayment(
+                            $payment
+                        ),
                 ], 422);
             }
         }
@@ -437,14 +470,15 @@ class PaymentController extends Controller
         }
 
         /*
-         * The gateway confirms payment.
+         * The gateway confirms successful payment.
          *
-         * Now atomically:
+         * Atomically:
          *
          * 1. Mark payment successful.
          * 2. Mark order paid.
          * 3. Complete order.
          * 4. Grant book entitlements.
+         * 5. Grant audiobook entitlements.
          */
         DB::transaction(function () use (
             $payment,
@@ -473,35 +507,80 @@ class PaymentController extends Controller
                 'paid_at' => now(),
             ]);
 
+            /*
+             * Grant the correct entitlement for each
+             * purchased digital product.
+             */
             foreach ($order->items as $item) {
-                if (! $item->book_id) {
+
+                /*
+                 * BOOK PURCHASE
+                 */
+                if (
+                    $item->isBook()
+                    && $item->book_id
+                ) {
+                    BookEntitlement::firstOrCreate(
+                        [
+                            'user_id' =>
+                                $order->user_id,
+
+                            'book_id' =>
+                                $item->book_id,
+                        ],
+                        [
+                            'source' => 'purchase',
+                            'can_read' => true,
+                            'can_download' => true,
+                            'status' => 'active',
+                            'granted_at' => now(),
+                            'expires_at' => null,
+                            'revoked_at' => null,
+                        ]
+                    );
+
                     continue;
                 }
 
-                BookEntitlement::firstOrCreate(
-                    [
-                        'user_id' =>
-                            $order->user_id,
+                /*
+                 * AUDIOBOOK PURCHASE
+                 */
+                if (
+                    $item->isAudiobook()
+                    && $item->audiobook_id
+                ) {
+                    AudiobookEntitlement::firstOrCreate(
+                        [
+                            'user_id' =>
+                                $order->user_id,
 
-                        'book_id' =>
-                            $item->book_id,
-                    ],
-                    [
-                        'source' => 'purchase',
-                        'can_read' => true,
-                        'can_download' => true,
-                        'status' => 'active',
-                        'granted_at' => now(),
-                        'expires_at' => null,
-                    ]
-                );
+                            'audiobook_id' =>
+                                $item->audiobook_id,
+                        ],
+                        [
+                            'source' => 'purchase',
+                            'can_stream' => true,
+                            'can_download' => true,
+                            'status' => 'active',
+                            'granted_at' => now(),
+                            'expires_at' => null,
+                            'revoked_at' => null,
+                        ]
+                    );
+                }
             }
         });
 
         $payment->refresh();
 
+        $payment->load([
+            'order',
+        ]);
+
         return response()->json([
-            'data' => $this->formatPayment($payment),
+            'data' => $this->formatPayment(
+                $payment
+            ),
 
             'order' => [
                 'uuid' =>
@@ -546,10 +625,15 @@ class PaymentController extends Controller
                 $payment->status,
 
             'currency' =>
-                $payment->currency,
+                strtoupper($payment->currency),
 
             'amount' =>
-                $payment->amount,
+                number_format(
+                    (float) $payment->amount,
+                    2,
+                    '.',
+                    ''
+                ),
 
             'paid_at' =>
                 $payment->paid_at,

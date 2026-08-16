@@ -423,7 +423,9 @@ class AdminOrderControllerTest extends TestCase
 
         OrderItem::create([
             'order_id' => $order->id,
+            'item_type' => 'book',
             'book_id' => $book->id,
+            'audiobook_id' => null,
             'unit_price' => 25.00,
             'currency' => 'USD',
             'quantity' => 1,
@@ -492,9 +494,9 @@ class AdminOrderControllerTest extends TestCase
             'status' => 'successful',
             'currency' => 'USD',
             'amount' => 30.00,
-            'gateway_response' => json_encode([
+            'gateway_response' => [
                 'status' => true,
-            ]),
+            ],
             'paid_at' => now(),
             'failed_at' => null,
         ]);

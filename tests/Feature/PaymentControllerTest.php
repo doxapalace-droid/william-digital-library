@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Models\Audiobook;
+use App\Models\AudiobookEntitlement;
 use App\Models\Book;
 use App\Models\BookEntitlement;
 use App\Models\Order;
@@ -84,6 +86,34 @@ class PaymentControllerTest extends TestCase
     }
 
     /**
+     * Create a published and active audiobook.
+     *
+     * We deliberately create the audiobook directly rather
+     * than using Audiobook::factory(), so this test does not
+     * depend on an AudiobookFactory existing.
+     */
+    private function createAudiobook(
+        float $price = 30.00,
+        string $currency = 'USD'
+    ): Audiobook {
+        $book = $this->createBook(
+            30.00,
+            $currency
+        );
+
+        return Audiobook::create([
+            'book_id' => $book->id,
+            'description' => 'Test audiobook.',
+            'cover_image' => 'audiobooks/test.jpg',
+            'price' => $price,
+            'currency' => $currency,
+            'status' => 'active',
+            'duration_seconds' => 3600,
+            'published_at' => now()->subMinute(),
+        ]);
+    }
+
+    /**
      * Create an unpaid order.
      */
     private function createOrder(
@@ -118,7 +148,29 @@ class PaymentControllerTest extends TestCase
     ): OrderItem {
         return OrderItem::create([
             'order_id' => $order->id,
+            'item_type' => 'book',
             'book_id' => $book->id,
+            'audiobook_id' => null,
+            'unit_price' => $price,
+            'currency' => $order->currency,
+            'quantity' => 1,
+            'subtotal' => $price,
+        ]);
+    }
+
+    /**
+     * Add an audiobook to an order.
+     */
+    private function addAudiobookOrderItem(
+        Order $order,
+        Audiobook $audiobook,
+        float $price = 30.00
+    ): OrderItem {
+        return OrderItem::create([
+            'order_id' => $order->id,
+            'item_type' => 'audiobook',
+            'book_id' => null,
+            'audiobook_id' => $audiobook->id,
             'unit_price' => $price,
             'currency' => $order->currency,
             'quantity' => 1,
@@ -132,6 +184,7 @@ class PaymentControllerTest extends TestCase
     public function test_guest_cannot_initiate_payment(): void
     {
         $user = $this->createUser();
+
         $order = $this->createOrder($user);
 
         $response = $this->postJson('/api/payments', [
@@ -149,6 +202,7 @@ class PaymentControllerTest extends TestCase
     public function test_user_can_initiate_payment_for_unpaid_order(): void
     {
         $user = $this->createUser();
+
         $book = $this->createBook();
 
         $order = $this->createOrder(
@@ -357,6 +411,7 @@ class PaymentControllerTest extends TestCase
     public function test_duplicate_pending_payment_is_not_created(): void
     {
         $user = $this->createUser();
+
         $book = $this->createBook();
 
         $order = $this->createOrder(
@@ -435,8 +490,9 @@ class PaymentControllerTest extends TestCase
             'currency' => 'USD',
             'amount' => 30.00,
 
-            // IMPORTANT:
-            // Payment model casts this field to array.
+            /*
+             * Payment model casts this field to array.
+             */
             'gateway_response' => json_encode([
                 'status' => true,
             ]),
@@ -650,7 +706,12 @@ class PaymentControllerTest extends TestCase
             'order_id' => $order->id,
             'user_id' => $user->id,
             'gateway' => 'paystack',
+
+            /*
+             * This MUST match the fake Paystack response.
+             */
             'transaction_reference' => 'DP-TEST-REFERENCE',
+
             'status' => 'pending',
             'currency' => 'USD',
             'amount' => 30.00,
@@ -777,7 +838,12 @@ class PaymentControllerTest extends TestCase
             'order_id' => $order->id,
             'user_id' => $user->id,
             'gateway' => 'paystack',
+
+            /*
+             * MUST match the fake Paystack response.
+             */
             'transaction_reference' => 'DP-TEST-REFERENCE',
+
             'status' => 'pending',
             'currency' => 'USD',
             'amount' => 30.00,
@@ -808,6 +874,102 @@ class PaymentControllerTest extends TestCase
                 'status' => 'active',
             ]
         );
+    }
+
+    /**
+     * Successful payment should create an entitlement
+     * for the purchased audiobook.
+     *
+     * IMPORTANT:
+     * The payment reference MUST match the fake
+     * Paystack verification response.
+     */
+    public function test_successful_payment_creates_audiobook_entitlement(): void
+    {
+        $user = $this->createUser();
+
+        $audiobook = $this->createAudiobook(
+            30.00,
+            'USD'
+        );
+
+        $order = $this->createOrder(
+            $user,
+            30.00,
+            0.00,
+            30.00,
+            'USD'
+        );
+
+        $this->addAudiobookOrderItem(
+            $order,
+            $audiobook,
+            30.00
+        );
+
+        $payment = Payment::create([
+            'order_id' => $order->id,
+            'user_id' => $user->id,
+            'gateway' => 'paystack',
+
+            /*
+             * THIS IS THE IMPORTANT FIX.
+             *
+             * The fake Paystack verification response
+             * returns DP-TEST-REFERENCE.
+             */
+            'transaction_reference' => 'DP-TEST-REFERENCE',
+
+            'status' => 'pending',
+            'currency' => 'USD',
+            'amount' => 30.00,
+            'gateway_response' => null,
+            'paid_at' => null,
+            'failed_at' => null,
+        ]);
+
+        Sanctum::actingAs($user);
+
+        /*
+         * VERIFY IS A POST ENDPOINT.
+         */
+        $response = $this->postJson(
+            "/api/payments/{$payment->uuid}/verify"
+        );
+
+        $response->assertOk();
+
+        /*
+         * Confirm the audiobook entitlement was created.
+         */
+        $this->assertDatabaseHas(
+            'audiobook_entitlements',
+            [
+                'user_id' => $user->id,
+                'audiobook_id' => $audiobook->id,
+                'source' => 'purchase',
+                'can_stream' => true,
+                'can_download' => true,
+                'status' => 'active',
+            ]
+        );
+
+        /*
+         * Confirm the payment was marked successful.
+         */
+        $this->assertDatabaseHas('payments', [
+            'id' => $payment->id,
+            'status' => 'successful',
+        ]);
+
+        /*
+         * Confirm the order was marked paid and completed.
+         */
+        $this->assertDatabaseHas('orders', [
+            'id' => $order->id,
+            'payment_status' => 'paid',
+            'status' => 'completed',
+        ]);
     }
 
     /**
@@ -965,7 +1127,10 @@ class PaymentControllerTest extends TestCase
             'currency' => 'USD',
             'amount' => 30.00,
 
-            // Store JSON because Payment casts this field to array.
+            /*
+             * Store JSON because Payment casts this
+             * field to array.
+             */
             'gateway_response' => json_encode([
                 'status' => true,
             ]),

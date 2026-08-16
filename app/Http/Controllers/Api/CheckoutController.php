@@ -7,6 +7,7 @@ use App\Models\BookEntitlement;
 use App\Models\CartItem;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\AudiobookEntitlement;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +19,11 @@ class CheckoutController extends Controller
      * Display the authenticated user's checkout summary.
      *
      * This does not create an order.
+     *
+     * Supports:
+     * - Books
+     * - Audiobooks
+     * - Mixed carts
      */
     public function index(Request $request): JsonResponse
     {
@@ -28,17 +34,31 @@ class CheckoutController extends Controller
         if ($cartItems->isEmpty()) {
             return response()->json([
                 'message' => 'Your cart is empty.',
+
                 'data' => [
                     'items' => [],
                     'currency' => null,
-                    'subtotal' => 0.00,
-                    'discount' => 0.00,
-                    'total' => 0.00,
+                    'subtotal' => '0.00',
+                    'discount' => '0.00',
+                    'total' => '0.00',
                 ],
             ], 422);
         }
 
         $this->ensureSingleCurrency($cartItems);
+
+        /*
+         * Validate the current state of every item.
+         *
+         * This catches products that may have become
+         * unavailable after being added to the cart.
+         */
+        foreach ($cartItems as $cartItem) {
+            $this->validateCartItem(
+                $cartItem,
+                $user->id
+            );
+        }
 
         $subtotal = $this->calculateSubtotal($cartItems);
 
@@ -51,39 +71,33 @@ class CheckoutController extends Controller
                     )
                     ->values(),
 
-                'currency' => $cartItems->first()->currency,
-
-                'subtotal' => number_format(
-                    $subtotal,
-                    2,
-                    '.',
-                    ''
+                'currency' => strtoupper(
+                    $cartItems->first()->currency
                 ),
 
-                'discount' => number_format(
-                    0,
-                    2,
-                    '.',
-                    ''
+                'subtotal' => $this->formatMoney(
+                    $subtotal
                 ),
 
-                'total' => number_format(
-                    $subtotal,
-                    2,
-                    '.',
-                    ''
+                'discount' => $this->formatMoney(
+                    0
+                ),
+
+                'total' => $this->formatMoney(
+                    $subtotal
                 ),
             ],
         ]);
     }
 
     /**
-     * Create a pending order from the authenticated user's cart.
+     * Create a pending order from the authenticated
+     * user's cart.
      *
      * Payment is NOT processed here.
      *
-     * The cart is cleared only after the order and all
-     * order items have been created successfully.
+     * The cart is cleared only after the order and
+     * all order items have been created successfully.
      */
     public function store(Request $request): JsonResponse
     {
@@ -94,7 +108,9 @@ class CheckoutController extends Controller
             /*
              * Load the user's current cart.
              */
-            $cartItems = $this->getValidCartItems($user->id);
+            $cartItems = $this->getValidCartItems(
+                $user->id
+            );
 
             /*
              * Checkout cannot proceed with an empty cart.
@@ -108,14 +124,19 @@ class CheckoutController extends Controller
             }
 
             /*
-             * All items in one order must use
+             * All products in one order must use
              * the same currency.
              */
-            $this->ensureSingleCurrency($cartItems);
+            $this->ensureSingleCurrency(
+                $cartItems
+            );
 
             /*
-             * Validate every cart item before creating
-             * the order.
+             * Validate every product again immediately
+             * before creating the order.
+             *
+             * This is important because the cart may have
+             * changed since the checkout summary was viewed.
              */
             foreach ($cartItems as $cartItem) {
                 $this->validateCartItem(
@@ -134,7 +155,7 @@ class CheckoutController extends Controller
 
             /*
              * Discounts will be introduced later when
-             * coupons and discount functionality are built.
+             * coupon/discount functionality is built.
              */
             $discount = 0.00;
 
@@ -148,63 +169,94 @@ class CheckoutController extends Controller
              */
             $order = Order::create([
                 'user_id' => $user->id,
-                'order_number' => $this->generateOrderNumber(),
+
+                'order_number' =>
+                    $this->generateOrderNumber(),
+
                 'status' => 'pending',
+
                 'payment_status' => 'unpaid',
+
                 'currency' => strtoupper(
                     $cartItems->first()->currency
                 ),
+
                 'subtotal' => $subtotal,
+
                 'discount' => $discount,
+
                 'total' => $total,
+
                 'paid_at' => null,
             ]);
 
             /*
              * Convert every cart item into an order item.
              *
-             * Order items preserve the price that existed
-             * in the customer's cart at checkout.
+             * IMPORTANT:
+             * The item_type, book_id and audiobook_id are
+             * all preserved.
+             *
+             * Prices are copied from the cart snapshot.
              */
             foreach ($cartItems as $cartItem) {
                 OrderItem::create([
                     'order_id' => $order->id,
+
+                    'item_type' => $cartItem->item_type,
+
                     'book_id' => $cartItem->book_id,
-                    'unit_price' => $cartItem->unit_price,
+
+                    'audiobook_id' =>
+                        $cartItem->audiobook_id,
+
+                    'unit_price' =>
+                        $cartItem->unit_price,
+
                     'currency' => strtoupper(
                         $cartItem->currency
                     ),
-                    'quantity' => $cartItem->quantity,
-                    'subtotal' => $cartItem->subtotal,
+
+                    'quantity' =>
+                        $cartItem->quantity,
+
+                    'subtotal' =>
+                        $cartItem->subtotal,
                 ]);
             }
 
             /*
-             * IMPORTANT:
-             *
              * Clear the cart only after the order and
              * order items have been successfully created.
              *
              * If anything above fails, the transaction
-             * rolls back and the customer's cart remains.
+             * rolls back and the cart remains intact.
              */
             CartItem::query()
                 ->where('user_id', $user->id)
                 ->delete();
 
             /*
-             * Load the relationships required by the
+             * Load relationships required by the
              * customer-facing response.
              */
             $order->load([
                 'items.book:id,uuid,title,slug,subtitle,author,cover_image,price,currency',
+
+                'items.audiobook' => function ($query) {
+                    $query->with([
+                        'book:id,uuid,title,slug,subtitle,author,cover_image',
+                    ]);
+                },
             ]);
 
             return $order;
         });
 
         return response()->json([
-            'message' => 'Checkout order created successfully.',
+            'message' =>
+                'Checkout order created successfully.',
+
             'data' => $this->formatOrder($order),
         ], 201);
     }
@@ -216,7 +268,13 @@ class CheckoutController extends Controller
     {
         return CartItem::query()
             ->with([
-                'book:id,uuid,title,slug,subtitle,author,cover_image,price,currency,is_published',
+                'book:id,uuid,title,slug,subtitle,author,cover_image,price,currency,is_published,published_at',
+
+                'audiobook' => function ($query) {
+                    $query->with([
+                        'book:id,uuid,title,slug,subtitle,author,cover_image',
+                    ]);
+                },
             ])
             ->where('user_id', $userId)
             ->orderBy('created_at')
@@ -224,9 +282,85 @@ class CheckoutController extends Controller
     }
 
     /**
-     * Validate an individual cart item before checkout.
+     * Validate an individual cart item.
+     *
+     * Supports both books and audiobooks.
      */
     private function validateCartItem(
+        CartItem $cartItem,
+        int $userId
+    ): void {
+        /*
+         * Quantity must always be at least one.
+         */
+        if ($cartItem->quantity < 1) {
+            throw ValidationException::withMessages([
+                'cart' => [
+                    'Invalid quantity in your cart.',
+                ],
+            ]);
+        }
+
+        /*
+         * Captured price cannot be negative.
+         */
+        if ((float) $cartItem->unit_price < 0) {
+            throw ValidationException::withMessages([
+                'cart' => [
+                    'Invalid price in your cart.',
+                ],
+            ]);
+        }
+
+        /*
+         * Currency must be present.
+         */
+        if (! $cartItem->currency) {
+            throw ValidationException::withMessages([
+                'cart' => [
+                    'Invalid currency in your cart.',
+                ],
+            ]);
+        }
+
+        /*
+         * Validate book cart item.
+         */
+        if ($cartItem->isBook()) {
+            $this->validateBookCartItem(
+                $cartItem,
+                $userId
+            );
+
+            return;
+        }
+
+        /*
+         * Validate audiobook cart item.
+         */
+        if ($cartItem->isAudiobook()) {
+            $this->validateAudiobookCartItem(
+                $cartItem,
+                $userId
+            );
+
+            return;
+        }
+
+        /*
+         * Unknown cart item type.
+         */
+        throw ValidationException::withMessages([
+            'cart' => [
+                'Your cart contains an invalid product type.',
+            ],
+        ]);
+    }
+
+    /**
+     * Validate a book cart item.
+     */
+    private function validateBookCartItem(
         CartItem $cartItem,
         int $userId
     ): void {
@@ -236,10 +370,20 @@ class CheckoutController extends Controller
          * The book may have been unpublished after
          * it was added to the cart.
          */
-        if (! $book || ! $book->is_published) {
+        if (
+            ! $book
+            || ! $book->is_published
+            || (
+                $book->published_at !== null
+                && $book->published_at->isFuture()
+            )
+        ) {
             throw ValidationException::withMessages([
                 'cart' => [
-                    "The book '{$book?->title}' is no longer available for purchase.",
+                    sprintf(
+                        "The book '%s' is no longer available for purchase.",
+                        $book?->title ?? 'Unknown book'
+                    ),
                 ],
             ]);
         }
@@ -272,36 +416,79 @@ class CheckoutController extends Controller
                 ],
             ]);
         }
+    }
+
+    /**
+     * Validate an audiobook cart item.
+     */
+    private function validateAudiobookCartItem(
+        CartItem $cartItem,
+        int $userId
+    ): void {
+        $audiobook = $cartItem->audiobook;
 
         /*
-         * Quantity must always be at least one.
+         * The audiobook must exist.
          */
-        if ($cartItem->quantity < 1) {
+        if (! $audiobook) {
             throw ValidationException::withMessages([
                 'cart' => [
-                    "Invalid quantity for '{$book->title}'.",
+                    'The audiobook in your cart no longer exists.',
                 ],
             ]);
         }
 
         /*
-         * Captured cart price cannot be negative.
+         * Audiobook must currently be active.
          */
-        if ((float) $cartItem->unit_price < 0) {
+        if (! $audiobook->isActive()) {
             throw ValidationException::withMessages([
                 'cart' => [
-                    "Invalid price for '{$book->title}'.",
+                    'The audiobook is no longer available for purchase.',
                 ],
             ]);
         }
 
         /*
-         * Currency must be present.
+         * Audiobook must be purchasable.
          */
-        if (! $cartItem->currency) {
+        if (! $audiobook->isPurchasable()) {
             throw ValidationException::withMessages([
                 'cart' => [
-                    "Invalid currency for '{$book->title}'.",
+                    'The audiobook is not currently available for purchase.',
+                ],
+            ]);
+        }
+
+        /*
+         * A customer cannot purchase an audiobook
+         * they already own through an active entitlement.
+         */
+        $alreadyOwnsAudiobook =
+            AudiobookEntitlement::query()
+                ->where('user_id', $userId)
+                ->where(
+                    'audiobook_id',
+                    $audiobook->id
+                )
+                ->where('status', 'active')
+                ->where('can_stream', true)
+                ->whereNull('revoked_at')
+                ->where(function ($query) {
+                    $query
+                        ->whereNull('expires_at')
+                        ->orWhere(
+                            'expires_at',
+                            '>',
+                            now()
+                        );
+                })
+                ->exists();
+
+        if ($alreadyOwnsAudiobook) {
+            throw ValidationException::withMessages([
+                'cart' => [
+                    'You already own this audiobook.',
                 ],
             ]);
         }
@@ -310,8 +497,9 @@ class CheckoutController extends Controller
     /**
      * Ensure all cart items use one currency.
      */
-    private function ensureSingleCurrency($cartItems): void
-    {
+    private function ensureSingleCurrency(
+        $cartItems
+    ): void {
         $currencies = $cartItems
             ->pluck('currency')
             ->filter()
@@ -333,9 +521,13 @@ class CheckoutController extends Controller
 
     /**
      * Calculate the cart subtotal.
+     *
+     * Uses the captured cart-item subtotal rather
+     * than the current catalogue price.
      */
-    private function calculateSubtotal($cartItems): float
-    {
+    private function calculateSubtotal(
+        $cartItems
+    ): float {
         return round(
             $cartItems->sum(
                 function (CartItem $item) {
@@ -382,57 +574,124 @@ class CheckoutController extends Controller
 
     /**
      * Format a cart item for checkout.
+     *
+     * Supports:
+     * - book
+     * - audiobook
      */
     private function formatCartItem(
         CartItem $cartItem
     ): array {
-        $book = $cartItem->book;
-
-        return [
+        $data = [
             'id' => $cartItem->id,
+
             'uuid' => $cartItem->uuid,
+
+            'item_type' => $cartItem->item_type,
 
             'quantity' => (int) $cartItem->quantity,
 
-            'unit_price' => number_format(
-                (float) $cartItem->unit_price,
-                2,
-                '.',
-                ''
+            'unit_price' => $this->formatMoney(
+                $cartItem->unit_price
             ),
 
             'currency' => strtoupper(
                 $cartItem->currency
             ),
 
-            'subtotal' => number_format(
-                (float) $cartItem->subtotal,
-                2,
-                '.',
-                ''
+            'subtotal' => $this->formatMoney(
+                $cartItem->subtotal
             ),
 
-            'book' => [
+            'book' => null,
+
+            'audiobook' => null,
+        ];
+
+        /*
+         * Book product.
+         */
+        if ($cartItem->isBook() && $cartItem->book) {
+            $book = $cartItem->book;
+
+            $data['book'] = [
                 'id' => $book->id,
+
                 'uuid' => $book->uuid,
+
                 'title' => $book->title,
+
                 'slug' => $book->slug,
+
                 'subtitle' => $book->subtitle,
+
                 'author' => $book->author,
+
                 'cover_image' => $book->cover_image,
 
-                'price' => number_format(
-                    (float) $book->price,
-                    2,
-                    '.',
-                    ''
+                'price' => $this->formatMoney(
+                    $book->price
                 ),
 
                 'currency' => strtoupper(
                     $book->currency
                 ),
-            ],
-        ];
+            ];
+        }
+
+        /*
+         * Audiobook product.
+         */
+        if (
+            $cartItem->isAudiobook()
+            && $cartItem->audiobook
+        ) {
+            $audiobook = $cartItem->audiobook;
+
+            $data['audiobook'] = [
+                'id' => $audiobook->id,
+
+                'uuid' => $audiobook->uuid,
+
+                'book_id' => $audiobook->book_id,
+
+                'title' =>
+                    $audiobook->book?->title,
+
+                'slug' =>
+                    $audiobook->book?->slug,
+
+                'subtitle' =>
+                    $audiobook->book?->subtitle,
+
+                'author' =>
+                    $audiobook->book?->author,
+
+                'description' =>
+                    $audiobook->description
+                    ?? $audiobook->book?->description,
+
+                'cover_image' =>
+                    $audiobook->cover_image
+                    ?? $audiobook->book?->cover_image,
+
+                'price' => $this->formatMoney(
+                    $audiobook->price
+                ),
+
+                'currency' => strtoupper(
+                    $audiobook->currency
+                ),
+
+                'duration_seconds' =>
+                    $audiobook->duration_seconds,
+
+                'duration_minutes' =>
+                    $audiobook->durationInMinutes(),
+            ];
+        }
+
+        return $data;
     }
 
     /**
@@ -443,96 +702,173 @@ class CheckoutController extends Controller
     ): array {
         return [
             'id' => $order->id,
+
             'uuid' => $order->uuid,
-            'order_number' => $order->order_number,
 
-            'status' => $order->status,
-            'payment_status' => $order->payment_status,
+            'order_number' =>
+                $order->order_number,
 
-            'currency' => strtoupper(
-                $order->currency
-            ),
+            'status' =>
+                $order->status,
 
-            'subtotal' => number_format(
-                (float) $order->subtotal,
-                2,
-                '.',
-                ''
-            ),
+            'payment_status' =>
+                $order->payment_status,
 
-            'discount' => number_format(
-                (float) $order->discount,
-                2,
-                '.',
-                ''
-            ),
+            'currency' =>
+                strtoupper($order->currency),
 
-            'total' => number_format(
-                (float) $order->total,
-                2,
-                '.',
-                ''
-            ),
+            'subtotal' =>
+                $this->formatMoney(
+                    $order->subtotal
+                ),
 
-            'paid_at' => $order->paid_at?->toISOString(),
+            'discount' =>
+                $this->formatMoney(
+                    $order->discount
+                ),
+
+            'total' =>
+                $this->formatMoney(
+                    $order->total
+                ),
+
+            'paid_at' =>
+                $order->paid_at?->toISOString(),
 
             'items' => $order->items
                 ->map(
                     function (OrderItem $item) {
-                        return [
-                            'id' => $item->id,
-                            'uuid' => $item->uuid,
-
-                            'quantity' =>
-                                (int) $item->quantity,
-
-                            'unit_price' =>
-                                number_format(
-                                    (float) $item->unit_price,
-                                    2,
-                                    '.',
-                                    ''
-                                ),
-
-                            'currency' =>
-                                strtoupper(
-                                    $item->currency
-                                ),
-
-                            'subtotal' =>
-                                number_format(
-                                    (float) $item->subtotal,
-                                    2,
-                                    '.',
-                                    ''
-                                ),
-
-                            'book' => [
-                                'id' =>
-                                    $item->book->id,
-
-                                'uuid' =>
-                                    $item->book->uuid,
-
-                                'title' =>
-                                    $item->book->title,
-
-                                'slug' =>
-                                    $item->book->slug,
-
-                                'subtitle' =>
-                                    $item->book->subtitle,
-
-                                'author' =>
-                                    $item->book->author,
-
-                                'cover_image' =>
-                                    $item->book->cover_image,
-                            ],
-                        ];
+                        return $this->formatOrderItem(
+                            $item
+                        );
                     }
                 )
                 ->values(),
         ];
+    }
+
+    /**
+     * Format an individual order item.
+     *
+     * Supports both books and audiobooks.
+     */
+    private function formatOrderItem(
+        OrderItem $item
+    ): array {
+        $data = [
+            'id' => $item->id,
+
+            'uuid' => $item->uuid,
+
+            'item_type' =>
+                $item->item_type,
+
+            'quantity' =>
+                (int) $item->quantity,
+
+            'unit_price' =>
+                $this->formatMoney(
+                    $item->unit_price
+                ),
+
+            'currency' =>
+                strtoupper(
+                    $item->currency
+                ),
+
+            'subtotal' =>
+                $this->formatMoney(
+                    $item->subtotal
+                ),
+
+            'book' => null,
+
+            'audiobook' => null,
+        ];
+
+        /*
+         * Book order item.
+         */
+        if ($item->isBook() && $item->book) {
+            $book = $item->book;
+
+            $data['book'] = [
+                'id' => $book->id,
+
+                'uuid' => $book->uuid,
+
+                'title' => $book->title,
+
+                'slug' => $book->slug,
+
+                'subtitle' => $book->subtitle,
+
+                'author' => $book->author,
+
+                'cover_image' =>
+                    $book->cover_image,
+            ];
+        }
+
+        /*
+         * Audiobook order item.
+         */
+        if (
+            $item->isAudiobook()
+            && $item->audiobook
+        ) {
+            $audiobook = $item->audiobook;
+
+            $data['audiobook'] = [
+                'id' => $audiobook->id,
+
+                'uuid' => $audiobook->uuid,
+
+                'book_id' =>
+                    $audiobook->book_id,
+
+                'title' =>
+                    $audiobook->book?->title,
+
+                'slug' =>
+                    $audiobook->book?->slug,
+
+                'subtitle' =>
+                    $audiobook->book?->subtitle,
+
+                'author' =>
+                    $audiobook->book?->author,
+
+                'description' =>
+                    $audiobook->description
+                    ?? $audiobook->book?->description,
+
+                'cover_image' =>
+                    $audiobook->cover_image
+                    ?? $audiobook->book?->cover_image,
+
+                'duration_seconds' =>
+                    $audiobook->duration_seconds,
+
+                'duration_minutes' =>
+                    $audiobook->durationInMinutes(),
+            ];
+        }
+
+        return $data;
+    }
+
+    /**
+     * Format money consistently.
+     */
+    private function formatMoney(
+        $value
+    ): string {
+        return number_format(
+            (float) $value,
+            2,
+            '.',
+            ''
+        );
     }
 }

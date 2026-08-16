@@ -265,7 +265,9 @@ class OrderControllerTest extends TestCase
          */
         OrderItem::create([
             'order_id' => $order->id,
+            'item_type' => 'book',
             'book_id' => $book->id,
+            'audiobook_id' => null,
             'unit_price' => 25.00,
             'currency' => 'USD',
             'quantity' => 1,
@@ -369,7 +371,9 @@ class OrderControllerTest extends TestCase
          */
         OrderItem::create([
             'order_id' => $order->id,
+            'item_type' => 'book',
             'book_id' => $book->id,
+            'audiobook_id' => null,
             'unit_price' => $book->price,
             'currency' => $book->currency,
             'quantity' => 1,

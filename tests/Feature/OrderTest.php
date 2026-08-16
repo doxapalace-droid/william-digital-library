@@ -61,6 +61,7 @@ class OrderTest extends TestCase
 
         $item = OrderItem::create([
             'order_id' => $order->id,
+            'item_type' => 'book',
             'book_id' => $book->id,
             'unit_price' => 20.00,
             'currency' => 'USD',
@@ -95,6 +96,7 @@ class OrderTest extends TestCase
 
         $item = OrderItem::create([
             'order_id' => $order->id,
+            'item_type' => 'book',
             'book_id' => $book->id,
             'unit_price' => 15.00,
             'currency' => 'USD',
@@ -131,6 +133,7 @@ class OrderTest extends TestCase
 
         $item = OrderItem::create([
             'order_id' => $order->id,
+            'item_type' => 'book',
             'book_id' => $book->id,
             'unit_price' => 25.00,
             'currency' => 'USD',

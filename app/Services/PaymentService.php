@@ -23,8 +23,8 @@ class PaymentService
         Order $order,
         string $gatewayName = 'paystack'
     ): Payment {
-        /**
-         * Make sure the order belongs to the user.
+        /*
+         * Make sure the order belongs to the authenticated user.
          */
         if ((int) $order->user_id !== (int) $user->id) {
             throw new RuntimeException(
@@ -32,7 +32,7 @@ class PaymentService
             );
         }
 
-        /**
+        /*
          * Only payable orders can be submitted.
          */
         if (! $order->canBePaid()) {
@@ -41,7 +41,7 @@ class PaymentService
             );
         }
 
-        /**
+        /*
          * Prevent duplicate pending or successful
          * payments for the same order.
          */
@@ -51,14 +51,15 @@ class PaymentService
                 'pending',
                 'successful',
             ])
+            ->latest('id')
             ->first();
 
         if ($existingPayment) {
             return $existingPayment;
         }
 
-        /**
-         * Create payment from the order snapshot.
+        /*
+         * Create the local payment record first.
          */
         $payment = DB::transaction(function () use (
             $user,
@@ -69,14 +70,18 @@ class PaymentService
                 'order_id' => $order->id,
                 'user_id' => $user->id,
                 'gateway' => $gatewayName,
+                'transaction_reference' => null,
                 'status' => 'pending',
                 'currency' => strtoupper($order->currency),
                 'amount' => $order->total,
+                'gateway_response' => null,
+                'paid_at' => null,
+                'failed_at' => null,
             ]);
         });
 
-        /**
-         * Send payment to gateway.
+        /*
+         * Initialize the payment with the gateway.
          */
         try {
             $response = $this->gateway->initialize(
@@ -89,18 +94,21 @@ class PaymentService
                     ?? $payment->transaction_reference,
 
                 'gateway_response' =>
-                    $this->encodeGatewayResponse(
+                    $this->normalizeGatewayResponse(
                         $response['raw'] ?? $response
                     ),
             ]);
 
             return $payment->fresh();
+
         } catch (\Throwable $exception) {
+
             $payment->update([
                 'status' => 'failed',
                 'failed_at' => now(),
-                'gateway_response' =>
-                    $exception->getMessage(),
+                'gateway_response' => [
+                    'error' => $exception->getMessage(),
+                ],
             ]);
 
             throw $exception;
@@ -112,7 +120,7 @@ class PaymentService
      */
     public function verify(Payment $payment): Payment
     {
-        /**
+        /*
          * Successful payments do not need
          * to be verified again.
          */
@@ -120,9 +128,11 @@ class PaymentService
             return $payment;
         }
 
-        $result = $this->gateway->verify($payment);
+        $result = $this->gateway->verify(
+            $payment
+        );
 
-        /**
+        /*
          * Gateway says payment failed.
          */
         if (! ($result['successful'] ?? false)) {
@@ -130,7 +140,7 @@ class PaymentService
                 'status' => 'failed',
                 'failed_at' => now(),
                 'gateway_response' =>
-                    $this->encodeGatewayResponse(
+                    $this->normalizeGatewayResponse(
                         $result['raw'] ?? $result
                     ),
             ]);
@@ -138,20 +148,32 @@ class PaymentService
             return $payment->fresh();
         }
 
-        /**
+        /*
          * Verify amount.
          */
-        if (
-            isset($result['amount'])
-            && (float) $result['amount']
-                !== (float) $payment->amount
-        ) {
-            throw new RuntimeException(
-                'Payment amount does not match the order amount.'
+        if (isset($result['amount'])) {
+            $expectedAmount = round(
+                (float) $payment->amount,
+                2
             );
+
+            $receivedAmount = round(
+                (float) $result['amount'],
+                2
+            );
+
+            if (
+                abs(
+                    $expectedAmount - $receivedAmount
+                ) > 0.01
+            ) {
+                throw new RuntimeException(
+                    'Payment amount does not match the order amount.'
+                );
+            }
         }
 
-        /**
+        /*
          * Verify currency.
          */
         if (
@@ -164,6 +186,9 @@ class PaymentService
             );
         }
 
+        /*
+         * Mark payment and order as successful atomically.
+         */
         DB::transaction(function () use (
             $payment,
             $result
@@ -176,17 +201,15 @@ class PaymentService
                     ?? $payment->transaction_reference,
 
                 'gateway_response' =>
-                    $this->encodeGatewayResponse(
+                    $this->normalizeGatewayResponse(
                         $result['raw'] ?? $result
                     ),
 
                 'paid_at' => now(),
+
+                'failed_at' => null,
             ]);
 
-            /**
-             * Only mark the order paid after
-             * successful gateway verification.
-             */
             $payment->order()->update([
                 'payment_status' => 'paid',
                 'status' => 'completed',
@@ -198,23 +221,37 @@ class PaymentService
     }
 
     /**
-     * Encode gateway response safely.
+     * Normalize gateway response data.
+     *
+     * Payment.gateway_response is cast to an array
+     * by the Payment model, so always return an array.
      */
-    protected function encodeGatewayResponse(
+    protected function normalizeGatewayResponse(
         mixed $response
-    ): ?string {
+    ): ?array {
         if ($response === null) {
             return null;
         }
 
-        if (is_string($response)) {
+        if (is_array($response)) {
             return $response;
         }
 
-        return json_encode(
-            $response,
-            JSON_UNESCAPED_SLASHES
-                | JSON_UNESCAPED_UNICODE
-        );
+        if (is_object($response)) {
+            return json_decode(
+                json_encode($response),
+                true
+            );
+        }
+
+        if (is_string($response)) {
+            return [
+                'message' => $response,
+            ];
+        }
+
+        return [
+            'response' => $response,
+        ];
     }
 }
