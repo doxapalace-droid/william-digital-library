@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AdminOrderController;
 use App\Http\Controllers\Api\AuthorController;
+use App\Http\Controllers\Api\AudiobookListeningProgressController;
 use App\Http\Controllers\Api\AudiobookStreamController;
 use App\Http\Controllers\Api\BookController;
 use App\Http\Controllers\Api\BookDownloadController;
@@ -471,25 +472,55 @@ Route::middleware('auth:sanctum')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | Secure Audiobook Streaming
+    | Audiobook Streaming
     |--------------------------------------------------------------------------
     |
-    | Only authenticated customers can reach this endpoint.
+    | Streams an individual audiobook chapter.
     |
-    | AudiobookStreamController additionally verifies:
+    | Access is protected by:
     |
-    | - audiobook entitlement
-    | - active entitlement
-    | - streaming permission
-    | - audiobook status
-    | - chapter status
-    | - private audio file existence
+    | - Sanctum authentication
+    | - Audiobook entitlement
+    | - Active entitlement
+    | - Stream permission
+    | - Active audiobook
+    | - Active chapter
+    | - Private audio file verification
     |
     */
 
     Route::get('/audiobook-chapters/{chapter}/stream', [
         AudiobookStreamController::class,
         'stream',
+    ]);
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Audiobook Listening Progress
+    |--------------------------------------------------------------------------
+    |
+    | Customers can:
+    |
+    | - Retrieve their saved listening position
+    | - Save/update listening position
+    | - Save current chapter
+    | - Save listened seconds
+    | - Track overall completion
+    |
+    | The controller verifies audiobook entitlement before
+    | returning or modifying progress.
+    |
+    */
+
+    Route::get('/audiobooks/{audiobook}/progress', [
+        AudiobookListeningProgressController::class,
+        'show',
+    ]);
+
+    Route::put('/audiobooks/{audiobook}/progress', [
+        AudiobookListeningProgressController::class,
+        'update',
     ]);
 
 
