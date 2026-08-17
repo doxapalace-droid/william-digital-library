@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\CartController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CheckoutController;
 use App\Http\Controllers\Api\ContinueReadingController;
+use App\Http\Controllers\Api\CourseController;
 use App\Http\Controllers\Api\FavoriteController;
 use App\Http\Controllers\Api\HighlightController;
 use App\Http\Controllers\Api\MyLibraryController;
@@ -28,6 +29,7 @@ use App\Http\Controllers\Api\ReadingProgressController;
 use App\Http\Controllers\Api\RecommendationController;
 use App\Http\Controllers\Api\RecentlyViewedController;
 use App\Http\Controllers\Api\ReviewController;
+use App\Http\Controllers\Api\VideoController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -171,6 +173,83 @@ Route::get('/audiobooks/{audiobook}/chapters', [
 
 /*
 |--------------------------------------------------------------------------
+| Public Video Catalogue
+|--------------------------------------------------------------------------
+|
+| These endpoints expose public video metadata only.
+|
+| Private video files are NEVER exposed through these routes.
+|
+*/
+
+
+/*
+|--------------------------------------------------------------------------
+| Public Video Catalogue
+|--------------------------------------------------------------------------
+*/
+
+Route::get('/videos', [
+    VideoController::class,
+    'index',
+]);
+
+
+/*
+|--------------------------------------------------------------------------
+| Public Video Details
+|--------------------------------------------------------------------------
+*/
+
+Route::get('/videos/{video}', [
+    VideoController::class,
+    'show',
+]);
+
+
+/*
+|--------------------------------------------------------------------------
+| Public Course Catalogue
+|--------------------------------------------------------------------------
+|
+| These endpoints expose public course metadata.
+|
+| Only active and currently published courses are
+| publicly accessible.
+|
+*/
+
+
+/*
+|--------------------------------------------------------------------------
+| Public Course Catalogue
+|--------------------------------------------------------------------------
+*/
+
+Route::get('/courses', [
+    CourseController::class,
+    'index',
+]);
+
+
+/*
+|--------------------------------------------------------------------------
+| Public Course Details
+|--------------------------------------------------------------------------
+|
+| Uses the course UUID because Course uses UUID
+| for route model binding.
+|
+*/
+
+Route::get('/courses/{course}', [
+    CourseController::class,
+    'show',
+]);
+
+
+/*
+|--------------------------------------------------------------------------
 | Admin Routes
 |--------------------------------------------------------------------------
 |
@@ -261,7 +340,7 @@ Route::middleware([
     | Administrators can:
     |
     | - List audiobooks
-    | | - Create audiobooks
+    | - Create audiobooks
     | - View audiobook details
     | - Update audiobooks
     | - Delete audiobooks
