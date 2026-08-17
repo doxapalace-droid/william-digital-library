@@ -68,6 +68,14 @@ class User extends Authenticatable
     }
 
     /**
+     * Course lesson progress records belonging to this user.
+     */
+    public function courseLessonProgress(): HasMany
+    {
+        return $this->hasMany(CourseLessonProgress::class);
+    }
+
+    /**
      * Determine whether the user can read the given book.
      */
     public function canReadBook(Book $book): bool

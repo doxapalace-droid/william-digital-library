@@ -55,6 +55,14 @@ class Course extends Model
     }
 
     /**
+     * Lesson progress records belonging to this course.
+     */
+    public function lessonProgress(): HasMany
+    {
+        return $this->hasMany(CourseLessonProgress::class);
+    }
+
+    /**
      * Attribute casting.
      */
     protected function casts(): array

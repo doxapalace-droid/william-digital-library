@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\CheckoutController;
 use App\Http\Controllers\Api\ContinueReadingController;
 use App\Http\Controllers\Api\CourseController;
 use App\Http\Controllers\Api\CourseLessonController;
+use App\Http\Controllers\Api\CourseLessonProgressController;
 use App\Http\Controllers\Api\FavoriteController;
 use App\Http\Controllers\Api\HighlightController;
 use App\Http\Controllers\Api\MyLibraryController;
@@ -62,7 +63,6 @@ Route::get('/books', [
 | Book Search
 |--------------------------------------------------------------------------
 |
-| IMPORTANT:
 | Keep this route before /books/{slug}.
 |
 */
@@ -121,20 +121,12 @@ Route::get('/authors/{author}', [
 
 /*
 |--------------------------------------------------------------------------
-| Public Audiobook Catalogue
+| Public Audiobooks
 |--------------------------------------------------------------------------
 |
-| These endpoints expose public audiobook metadata only.
+| Public audiobook metadata only.
+| Private audio files are never exposed here.
 |
-| Private audio files are NEVER exposed through these routes.
-|
-*/
-
-
-/*
-|--------------------------------------------------------------------------
-| Public Audiobook Catalogue
-|--------------------------------------------------------------------------
 */
 
 Route::get('/audiobooks', [
@@ -142,29 +134,10 @@ Route::get('/audiobooks', [
     'index',
 ]);
 
-
-/*
-|--------------------------------------------------------------------------
-| Public Audiobook Details
-|--------------------------------------------------------------------------
-*/
-
 Route::get('/audiobooks/{audiobook}', [
     AudiobookController::class,
     'show',
 ]);
-
-
-/*
-|--------------------------------------------------------------------------
-| Public Audiobook Chapters
-|--------------------------------------------------------------------------
-|
-| Returns public chapter metadata only.
-|
-| The private audio_file path must never be exposed.
-|
-*/
 
 Route::get('/audiobooks/{audiobook}/chapters', [
     AudiobookChapterController::class,
@@ -174,33 +147,18 @@ Route::get('/audiobooks/{audiobook}/chapters', [
 
 /*
 |--------------------------------------------------------------------------
-| Public Video Catalogue
+| Public Videos
 |--------------------------------------------------------------------------
 |
-| These endpoints expose public video metadata only.
+| Public video metadata only.
+| Private video files are never exposed here.
 |
-| Private video files are NEVER exposed through these routes.
-|
-*/
-
-
-/*
-|--------------------------------------------------------------------------
-| Public Video Catalogue
-|--------------------------------------------------------------------------
 */
 
 Route::get('/videos', [
     VideoController::class,
     'index',
 ]);
-
-
-/*
-|--------------------------------------------------------------------------
-| Public Video Details
-|--------------------------------------------------------------------------
-*/
 
 Route::get('/videos/{video}', [
     VideoController::class,
@@ -210,38 +168,17 @@ Route::get('/videos/{video}', [
 
 /*
 |--------------------------------------------------------------------------
-| Public Course Catalogue
+| Public Courses
 |--------------------------------------------------------------------------
 |
-| These endpoints expose public course metadata.
+| Only active and currently published courses are returned.
 |
-| Only active and currently published courses are
-| publicly accessible.
-|
-*/
-
-
-/*
-|--------------------------------------------------------------------------
-| Public Course Catalogue
-|--------------------------------------------------------------------------
 */
 
 Route::get('/courses', [
     CourseController::class,
     'index',
 ]);
-
-
-/*
-|--------------------------------------------------------------------------
-| Public Course Details
-|--------------------------------------------------------------------------
-|
-| Uses the course UUID because Course uses UUID
-| for route model binding.
-|
-*/
 
 Route::get('/courses/{course}', [
     CourseController::class,
@@ -251,21 +188,15 @@ Route::get('/courses/{course}', [
 
 /*
 |--------------------------------------------------------------------------
-| Course Lesson Access
+| Public Course Lesson Access
 |--------------------------------------------------------------------------
 |
-| Preview lessons are publicly accessible.
+| Preview lessons may be accessed by guests.
 |
-| Non-preview lessons require authentication and
-| an active course entitlement.
+| Paid lessons are protected by CourseLessonController,
+| which checks authentication and course entitlement.
 |
-| The CourseLessonController is responsible for
-| enforcing the appropriate access rules.
-|
-| IMPORTANT:
-| This route must remain OUTSIDE the auth:sanctum
-| middleware group so that guests can access
-| preview lessons.
+| This route MUST remain outside auth:sanctum.
 |
 */
 
@@ -280,10 +211,7 @@ Route::get('/courses/{course}/lessons/{lesson}', [
 | Admin Routes
 |--------------------------------------------------------------------------
 |
-| These routes require:
-|
-| 1. Sanctum authentication
-| 2. Admin role
+| Authentication + admin role required.
 |
 */
 
@@ -291,7 +219,6 @@ Route::middleware([
     'auth:sanctum',
     'role:admin',
 ])->prefix('admin')->group(function () {
-
 
     /*
     |--------------------------------------------------------------------------
@@ -361,17 +288,8 @@ Route::middleware([
 
     /*
     |--------------------------------------------------------------------------
-    | Admin Audiobook Management
+    | Audiobook Management
     |--------------------------------------------------------------------------
-    |
-    | Administrators can:
-    |
-    | - List audiobooks
-    | - Create audiobooks
-    | - View audiobook details
-    | - Update audiobooks
-    | - Delete audiobooks
-    |
     */
 
     Route::get('/audiobooks', [
@@ -407,17 +325,8 @@ Route::middleware([
 
     /*
     |--------------------------------------------------------------------------
-    | Admin Audiobook Chapter Management
+    | Audiobook Chapter Management
     |--------------------------------------------------------------------------
-    |
-    | Administrators can:
-    |
-    | - List chapters
-    | - Create chapters
-    | - View individual chapters
-    | - Update chapters
-    | - Delete chapters
-    |
     */
 
     Route::get('/audiobooks/{audiobook}/chapters', [
@@ -455,15 +364,6 @@ Route::middleware([
     |--------------------------------------------------------------------------
     | Order Management
     |--------------------------------------------------------------------------
-    |
-    | Administrators can:
-    |
-    | - View all orders
-    | - Search orders
-    | - Filter orders
-    | - View individual orders
-    | - Update order/payment status
-    |
     */
 
     Route::get('/orders', [
@@ -485,19 +385,18 @@ Route::middleware([
 
 /*
 |--------------------------------------------------------------------------
-| Authenticated User / Customer Routes
+| Authenticated Customer Routes
 |--------------------------------------------------------------------------
 |
-| Every route in this group requires a valid Sanctum-authenticated user.
+| Every route in this group requires Sanctum authentication.
 |
 */
 
 Route::middleware('auth:sanctum')->group(function () {
 
-
     /*
     |--------------------------------------------------------------------------
-    | Authenticated User Profile
+    | Authenticated User
     |--------------------------------------------------------------------------
     */
 
@@ -508,11 +407,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | Customer Orders
+    | Orders
     |--------------------------------------------------------------------------
-    |
-    | Customers can only access their own orders.
-    |
     */
 
     Route::get('/orders', [
@@ -592,7 +488,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | Customer Cart
+    | Cart
     |--------------------------------------------------------------------------
     */
 
@@ -614,7 +510,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | Customer Checkout
+    | Checkout
     |--------------------------------------------------------------------------
     */
 
@@ -733,20 +629,7 @@ Route::middleware('auth:sanctum')->group(function () {
     | Audiobook Streaming
     |--------------------------------------------------------------------------
     |
-    | Streams an individual audiobook chapter.
-    |
-    | Access is protected by:
-    |
-    | - Sanctum authentication
-    | - Audiobook entitlement
-    | - Active entitlement
-    | - Stream permission
-    | - Active audiobook
-    | - Active chapter
-    | - Private audio file verification
-    |
-    | IMPORTANT:
-    | The route name is required by AudiobookChapterResource.
+    | Private audio is streamed through the controller.
     |
     */
 
@@ -760,10 +643,6 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     | Audiobook Download
     |--------------------------------------------------------------------------
-    |
-    | Download access is protected by audiobook entitlement
-    | and download permission.
-    |
     */
 
     Route::get('/audiobooks/{audiobook}/download', [
@@ -776,17 +655,6 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     | Audiobook Listening Progress
     |--------------------------------------------------------------------------
-    |
-    | Customers can:
-    |
-    | - Retrieve saved listening progress
-    | - Create listening progress
-    | - Update listening progress
-    | - Save current chapter
-    | - Save playback position
-    | - Save listened seconds
-    | - Track audiobook completion
-    |
     */
 
     Route::get('/audiobooks/{audiobook}/progress', [
@@ -802,7 +670,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | Reading Progress
+    | Book Reading Progress
     |--------------------------------------------------------------------------
     */
 
@@ -815,6 +683,91 @@ Route::middleware('auth:sanctum')->group(function () {
         ReadingProgressController::class,
         'update',
     ]);
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Course Learning
+    |--------------------------------------------------------------------------
+    |
+    | Course catalogue and lesson metadata are public.
+    |
+    | Course progress belongs to the authenticated user
+    | and therefore requires Sanctum authentication.
+    |
+    */
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Course Progress Summary
+    |--------------------------------------------------------------------------
+    |
+    | Returns the authenticated user's complete progress
+    | for the selected course.
+    |
+    */
+
+    Route::get('/courses/{course}/progress', [
+        CourseLessonProgressController::class,
+        'course',
+    ]);
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Individual Lesson Progress
+    |--------------------------------------------------------------------------
+    |
+    | Returns the authenticated user's progress for
+    | a particular lesson.
+    |
+    */
+
+    Route::get(
+        '/courses/{course}/lessons/{lesson}/progress',
+        [
+            CourseLessonProgressController::class,
+            'show',
+        ]
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Save Lesson Progress
+    |--------------------------------------------------------------------------
+    |
+    | Saves:
+    |
+    | - playback position
+    | - completion state
+    | - last accessed time
+    |
+    */
+
+    Route::put(
+        '/courses/{course}/lessons/{lesson}/progress',
+        [
+            CourseLessonProgressController::class,
+            'update',
+        ]
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Complete Lesson
+    |--------------------------------------------------------------------------
+    */
+
+    Route::post(
+        '/courses/{course}/lessons/{lesson}/complete',
+        [
+            CourseLessonProgressController::class,
+            'complete',
+        ]
+    );
 
 
     /*

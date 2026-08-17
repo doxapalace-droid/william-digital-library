@@ -6,6 +6,7 @@ use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CourseLesson extends Model
 {
@@ -49,6 +50,17 @@ class CourseLesson extends Model
     public function video(): BelongsTo
     {
         return $this->belongsTo(Video::class);
+    }
+
+    /**
+     * Progress records for this lesson.
+     */
+    public function progress(): HasMany
+    {
+        return $this->hasMany(
+            CourseLessonProgress::class,
+            'course_lesson_id'
+        );
     }
 
     /**
