@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CheckoutController;
 use App\Http\Controllers\Api\ContinueReadingController;
 use App\Http\Controllers\Api\CourseController;
+use App\Http\Controllers\Api\CourseLessonController;
 use App\Http\Controllers\Api\FavoriteController;
 use App\Http\Controllers\Api\HighlightController;
 use App\Http\Controllers\Api\MyLibraryController;
@@ -244,6 +245,32 @@ Route::get('/courses', [
 
 Route::get('/courses/{course}', [
     CourseController::class,
+    'show',
+]);
+
+
+/*
+|--------------------------------------------------------------------------
+| Course Lesson Access
+|--------------------------------------------------------------------------
+|
+| Preview lessons are publicly accessible.
+|
+| Non-preview lessons require authentication and
+| an active course entitlement.
+|
+| The CourseLessonController is responsible for
+| enforcing the appropriate access rules.
+|
+| IMPORTANT:
+| This route must remain OUTSIDE the auth:sanctum
+| middleware group so that guests can access
+| preview lessons.
+|
+*/
+
+Route::get('/courses/{course}/lessons/{lesson}', [
+    CourseLessonController::class,
     'show',
 ]);
 

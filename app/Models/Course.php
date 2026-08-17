@@ -47,6 +47,14 @@ class Course extends Model
     }
 
     /**
+     * Entitlements granted for this course.
+     */
+    public function entitlements(): HasMany
+    {
+        return $this->hasMany(CourseEntitlement::class);
+    }
+
+    /**
      * Attribute casting.
      */
     protected function casts(): array

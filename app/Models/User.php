@@ -9,20 +9,18 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
-use Illuminate\Database\Eloquent\Relations\HasOne;
-use App\Models\RecentlyViewed;
-
 
 #[Fillable(['name', 'email', 'password', 'role_id'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use  HasApiTokens, HasFactory, Notifiable, HasUuid, SoftDeletes;
+    use HasApiTokens, HasFactory, Notifiable, HasUuid, SoftDeletes;
 
     /**
      * Get the attributes that should be cast.
@@ -54,6 +52,22 @@ class User extends Authenticatable
     }
 
     /**
+     * The audiobook entitlements belonging to this user.
+     */
+    public function audiobookEntitlements(): HasMany
+    {
+        return $this->hasMany(AudiobookEntitlement::class);
+    }
+
+    /**
+     * The course entitlements belonging to this user.
+     */
+    public function courseEntitlements(): HasMany
+    {
+        return $this->hasMany(CourseEntitlement::class);
+    }
+
+    /**
      * Determine whether the user can read the given book.
      */
     public function canReadBook(Book $book): bool
@@ -70,90 +84,107 @@ class User extends Authenticatable
     }
 
     /**
-    * Reading progress records belonging to this user.
-    *
-    * Each record tracks the user's current position
-    * and progress in a particular book.
-    */
+     * Determine whether the user can access the given course.
+     */
+    public function canAccessCourse(Course $course): bool
+    {
+        return $this->courseEntitlements()
+            ->where('course_id', $course->id)
+            ->where('status', 'active')
+            ->where('can_access', true)
+            ->whereNull('revoked_at')
+            ->where(function ($query) {
+                $query
+                    ->whereNull('expires_at')
+                    ->orWhere(
+                        'expires_at',
+                        '>',
+                        now()
+                    );
+            })
+            ->exists();
+    }
+
+    /**
+     * Reading progress records belonging to this user.
+     *
+     * Each record tracks the user's current position
+     * and progress in a particular book.
+     */
     public function readingProgress(): HasMany
     {
-    return $this->hasMany(ReadingProgress::class);
+        return $this->hasMany(ReadingProgress::class);
     }
 
-
-        /**
-    * Bookmarks created by this customer.
-    */
+    /**
+     * Bookmarks created by this customer.
+     */
     public function bookmarks(): HasMany
     {
-    return $this->hasMany(Bookmark::class);
+        return $this->hasMany(Bookmark::class);
     }
 
-
-        /**
-    * Highlights created by this user.
-    */
+    /**
+     * Highlights created by this user.
+     */
     public function highlights(): HasMany
     {
-    return $this->hasMany(Highlight::class);
+        return $this->hasMany(Highlight::class);
     }
-        
+
     /**
-    * Reading notes created by this user.
-    */
-    public function readingNotes(): HasMany 
+     * Reading notes created by this user.
+     */
+    public function readingNotes(): HasMany
     {
-    return $this->hasMany(ReadingNote::class);
+        return $this->hasMany(ReadingNote::class);
     }
 
-
     /**
-    * The reader preferences belonging to this user.
-    */
+     * The reader preferences belonging to this user.
+     */
     public function readerPreference(): HasOne
     {
-    return $this->hasOne(ReaderPreference::class);
+        return $this->hasOne(ReaderPreference::class);
     }
-
 
     /**
      * Books favorited by this user.
-    */
+     */
     public function favorites(): HasMany
     {
-    return $this->hasMany(Favorite::class);
+        return $this->hasMany(Favorite::class);
     }
 
     /**
-    * Recently viewed books by this user.
-    */
+     * Recently viewed books by this user.
+     */
     public function recentlyViewed(): HasMany
     {
         return $this->hasMany(RecentlyViewed::class);
     }
 
     /**
-    * Orders placed by the customer.
-    */
+     * Orders placed by the customer.
+     */
     public function orders(): HasMany
     {
-    return $this->hasMany(Order::class);
+        return $this->hasMany(Order::class);
     }
-
 
     /**
-    * Items currently in the customer's cart.
-    */
+     * Items currently in the customer's cart.
+     */
     public function cartItems(): HasMany
     {
-    return $this->hasMany(CartItem::class);
+        return $this->hasMany(CartItem::class);
     }
 
-
+    /**
+     * Payments belonging to this user.
+     */
     public function payments(): HasMany
     {
-    return $this->hasMany(Payment::class);
+        return $this->hasMany(Payment::class);
     }
-
-    
 }
