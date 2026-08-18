@@ -42,6 +42,14 @@ class Order extends Model
     }
 
     /**
+     * Use UUID for route model binding.
+     */
+    public function getRouteKeyName(): string
+    {
+        return 'uuid';
+    }
+
+    /**
      * Customer who placed the order.
      */
     public function user(): BelongsTo
@@ -55,6 +63,14 @@ class Order extends Model
     public function items(): HasMany
     {
         return $this->hasMany(OrderItem::class);
+    }
+
+    /**
+     * Payments associated with this order.
+     */
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class);
     }
 
     /**
@@ -73,26 +89,47 @@ class Order extends Model
         return $this->status === 'completed';
     }
 
-    public function payments(): HasMany
+    /**
+     * Determine whether this order contains
+     * at least one course item.
+     */
+    public function hasCourse(): bool
     {
-    return $this->hasMany(Payment::class);
+        return $this->items()
+            ->where('item_type', 'course')
+            ->exists();
     }
 
-    
+    /**
+     * Get course items contained in this order.
+     */
+    public function courseItems(): HasMany
+    {
+        return $this->hasMany(OrderItem::class)
+            ->where('item_type', 'course');
+    }
 
     /**
      * Determine whether the order can still be paid.
      */
     public function canBePaid(): bool
     {
-        return in_array($this->payment_status, [
-            'unpaid',
-            'pending',
-            'failed',
-        ], true)
-        && !in_array($this->status, [
-            'cancelled',
-            'completed',
-        ], true);
+        return in_array(
+            $this->payment_status,
+            [
+                'unpaid',
+                'pending',
+                'failed',
+            ],
+            true
+        )
+        && ! in_array(
+            $this->status,
+            [
+                'cancelled',
+                'completed',
+            ],
+            true
+        );
     }
 }

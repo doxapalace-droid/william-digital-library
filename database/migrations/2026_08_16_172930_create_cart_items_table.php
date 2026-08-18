@@ -33,6 +33,7 @@ return new class extends Migration
              *
              * book
              * audiobook
+             * course
              */
             $table->string('item_type', 20);
 
@@ -40,7 +41,7 @@ return new class extends Migration
              * Book being purchased.
              *
              * Nullable because the cart item may
-             * instead represent an audiobook.
+             * represent an audiobook or course instead.
              */
             $table->foreignId('book_id')
                 ->nullable()
@@ -51,11 +52,22 @@ return new class extends Migration
              * Audiobook being purchased.
              *
              * Nullable because the cart item may
-             * instead represent a book.
+             * represent a book or course instead.
              */
             $table->foreignId('audiobook_id')
                 ->nullable()
                 ->constrained('audiobooks')
+                ->cascadeOnDelete();
+
+            /**
+             * Course being purchased.
+             *
+             * Nullable because the cart item may
+             * represent a book or audiobook instead.
+             */
+            $table->foreignId('course_id')
+                ->nullable()
+                ->constrained('courses')
                 ->cascadeOnDelete();
 
             /**
@@ -107,6 +119,15 @@ return new class extends Migration
             );
 
             /**
+             * Prevent the same course from appearing
+             * twice in one customer's cart.
+             */
+            $table->unique(
+                ['user_id', 'course_id'],
+                'cart_items_user_course_unique'
+            );
+
+            /**
              * Useful indexes for cart queries.
              */
             $table->index(
@@ -122,6 +143,11 @@ return new class extends Migration
             $table->index(
                 'audiobook_id',
                 'cart_items_audiobook_index'
+            );
+
+            $table->index(
+                'course_id',
+                'cart_items_course_index'
             );
         });
     }

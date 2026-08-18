@@ -63,6 +63,14 @@ class Course extends Model
     }
 
     /**
+     * Order items containing this course.
+     */
+    public function orderItems(): HasMany
+    {
+        return $this->hasMany(OrderItem::class);
+    }
+
+    /**
      * Attribute casting.
      */
     protected function casts(): array

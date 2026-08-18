@@ -3,11 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AudiobookEntitlement;
 use App\Models\BookEntitlement;
 use App\Models\CartItem;
+use App\Models\CourseEntitlement;
 use App\Models\Order;
 use App\Models\OrderItem;
-use App\Models\AudiobookEntitlement;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -23,6 +24,7 @@ class CheckoutController extends Controller
      * Supports:
      * - Books
      * - Audiobooks
+     * - Courses
      * - Mixed carts
      */
     public function index(Request $request): JsonResponse
@@ -79,9 +81,7 @@ class CheckoutController extends Controller
                     $subtotal
                 ),
 
-                'discount' => $this->formatMoney(
-                    0
-                ),
+                'discount' => $this->formatMoney(0),
 
                 'total' => $this->formatMoney(
                     $subtotal
@@ -104,7 +104,6 @@ class CheckoutController extends Controller
         $user = $request->user();
 
         $order = DB::transaction(function () use ($user) {
-
             /*
              * Load the user's current cart.
              */
@@ -194,8 +193,8 @@ class CheckoutController extends Controller
              * Convert every cart item into an order item.
              *
              * IMPORTANT:
-             * The item_type, book_id and audiobook_id are
-             * all preserved.
+             * The item_type, book_id, audiobook_id and
+             * course_id are all preserved.
              *
              * Prices are copied from the cart snapshot.
              */
@@ -209,6 +208,9 @@ class CheckoutController extends Controller
 
                     'audiobook_id' =>
                         $cartItem->audiobook_id,
+
+                    'course_id' =>
+                        $cartItem->course_id,
 
                     'unit_price' =>
                         $cartItem->unit_price,
@@ -248,6 +250,8 @@ class CheckoutController extends Controller
                         'book:id,uuid,title,slug,subtitle,author,cover_image',
                     ]);
                 },
+
+                'items.course:id,uuid,title,slug,subtitle,description,cover_image,price,currency,status,published_at',
             ]);
 
             return $order;
@@ -275,6 +279,8 @@ class CheckoutController extends Controller
                         'book:id,uuid,title,slug,subtitle,author,cover_image',
                     ]);
                 },
+
+                'course:id,uuid,title,slug,subtitle,description,cover_image,price,currency,status,published_at',
             ])
             ->where('user_id', $userId)
             ->orderBy('created_at')
@@ -284,7 +290,10 @@ class CheckoutController extends Controller
     /**
      * Validate an individual cart item.
      *
-     * Supports both books and audiobooks.
+     * Supports:
+     * - Books
+     * - Audiobooks
+     * - Courses
      */
     private function validateCartItem(
         CartItem $cartItem,
@@ -340,6 +349,18 @@ class CheckoutController extends Controller
          */
         if ($cartItem->isAudiobook()) {
             $this->validateAudiobookCartItem(
+                $cartItem,
+                $userId
+            );
+
+            return;
+        }
+
+        /*
+         * Validate course cart item.
+         */
+        if ($cartItem->isCourse()) {
+            $this->validateCourseCartItem(
                 $cartItem,
                 $userId
             );
@@ -495,6 +516,79 @@ class CheckoutController extends Controller
     }
 
     /**
+     * Validate a course cart item.
+     */
+    private function validateCourseCartItem(
+        CartItem $cartItem,
+        int $userId
+    ): void {
+        $course = $cartItem->course;
+
+        /*
+         * The course must exist.
+         */
+        if (! $course) {
+            throw ValidationException::withMessages([
+                'cart' => [
+                    'The course in your cart no longer exists.',
+                ],
+            ]);
+        }
+
+        /*
+         * Course must currently be active and published.
+         */
+        if (! $course->isActive()) {
+            throw ValidationException::withMessages([
+                'cart' => [
+                    "The course '{$course->title}' is no longer available for purchase.",
+                ],
+            ]);
+        }
+
+        /*
+         * Course must be purchasable.
+         */
+        if (! $course->isPurchasable()) {
+            throw ValidationException::withMessages([
+                'cart' => [
+                    "The course '{$course->title}' is not currently available for purchase.",
+                ],
+            ]);
+        }
+
+        /*
+         * A customer cannot purchase a course they
+         * already have active access to.
+         */
+        $alreadyOwnsCourse =
+            CourseEntitlement::query()
+                ->where('user_id', $userId)
+                ->where('course_id', $course->id)
+                ->where('status', 'active')
+                ->where('can_access', true)
+                ->whereNull('revoked_at')
+                ->where(function ($query) {
+                    $query
+                        ->whereNull('expires_at')
+                        ->orWhere(
+                            'expires_at',
+                            '>',
+                            now()
+                        );
+                })
+                ->exists();
+
+        if ($alreadyOwnsCourse) {
+            throw ValidationException::withMessages([
+                'cart' => [
+                    "You already have access to the course '{$course->title}'.",
+                ],
+            ]);
+        }
+    }
+
+    /**
      * Ensure all cart items use one currency.
      */
     private function ensureSingleCurrency(
@@ -578,6 +672,7 @@ class CheckoutController extends Controller
      * Supports:
      * - book
      * - audiobook
+     * - course
      */
     private function formatCartItem(
         CartItem $cartItem
@@ -606,6 +701,8 @@ class CheckoutController extends Controller
             'book' => null,
 
             'audiobook' => null,
+
+            'course' => null,
         ];
 
         /*
@@ -691,6 +788,40 @@ class CheckoutController extends Controller
             ];
         }
 
+        /*
+         * Course product.
+         */
+        if (
+            $cartItem->isCourse()
+            && $cartItem->course
+        ) {
+            $course = $cartItem->course;
+
+            $data['course'] = [
+                'id' => $course->id,
+
+                'uuid' => $course->uuid,
+
+                'title' => $course->title,
+
+                'slug' => $course->slug,
+
+                'subtitle' => $course->subtitle,
+
+                'description' => $course->description,
+
+                'cover_image' => $course->cover_image,
+
+                'price' => $this->formatMoney(
+                    $course->price
+                ),
+
+                'currency' => strtoupper(
+                    $course->currency
+                ),
+            ];
+        }
+
         return $data;
     }
 
@@ -750,7 +881,10 @@ class CheckoutController extends Controller
     /**
      * Format an individual order item.
      *
-     * Supports both books and audiobooks.
+     * Supports:
+     * - Books
+     * - Audiobooks
+     * - Courses
      */
     private function formatOrderItem(
         OrderItem $item
@@ -784,6 +918,8 @@ class CheckoutController extends Controller
             'book' => null,
 
             'audiobook' => null,
+
+            'course' => null,
         ];
 
         /*
@@ -852,6 +988,33 @@ class CheckoutController extends Controller
 
                 'duration_minutes' =>
                     $audiobook->durationInMinutes(),
+            ];
+        }
+
+        /*
+         * Course order item.
+         */
+        if (
+            $item->isCourse()
+            && $item->course
+        ) {
+            $course = $item->course;
+
+            $data['course'] = [
+                'id' => $course->id,
+
+                'uuid' => $course->uuid,
+
+                'title' => $course->title,
+
+                'slug' => $course->slug,
+
+                'subtitle' => $course->subtitle,
+
+                'description' => $course->description,
+
+                'cover_image' =>
+                    $course->cover_image,
             ];
         }
 

@@ -20,6 +20,8 @@ class CartItem extends Model
 
     public const TYPE_AUDIOBOOK = 'audiobook';
 
+    public const TYPE_COURSE = 'course';
+
     /**
      * Attributes that may be mass assigned.
      */
@@ -28,6 +30,7 @@ class CartItem extends Model
         'item_type',
         'book_id',
         'audiobook_id',
+        'course_id',
         'unit_price',
         'currency',
         'quantity',
@@ -53,17 +56,15 @@ class CartItem extends Model
      * application code creates a CartItem without
      * explicitly providing item_type.
      *
-     * This is a safety net.
-     *
      * Controllers should still explicitly provide
-     * item_type when creating cart items.
+     * item_type whenever possible.
      */
     protected static function booted(): void
     {
         static::creating(function (CartItem $cartItem): void {
             /*
-             * If the caller already supplied a valid
-             * item type, preserve it.
+             * If the caller supplied a valid item type,
+             * preserve it.
              */
             if (
                 in_array(
@@ -71,6 +72,7 @@ class CartItem extends Model
                     [
                         self::TYPE_BOOK,
                         self::TYPE_AUDIOBOOK,
+                        self::TYPE_COURSE,
                     ],
                     true
                 )
@@ -85,6 +87,7 @@ class CartItem extends Model
             if (
                 $cartItem->book_id !== null
                 && $cartItem->audiobook_id === null
+                && $cartItem->course_id === null
             ) {
                 $cartItem->item_type = self::TYPE_BOOK;
 
@@ -94,21 +97,29 @@ class CartItem extends Model
             if (
                 $cartItem->audiobook_id !== null
                 && $cartItem->book_id === null
+                && $cartItem->course_id === null
             ) {
                 $cartItem->item_type = self::TYPE_AUDIOBOOK;
 
                 return;
             }
 
+            if (
+                $cartItem->course_id !== null
+                && $cartItem->book_id === null
+                && $cartItem->audiobook_id === null
+            ) {
+                $cartItem->item_type = self::TYPE_COURSE;
+
+                return;
+            }
+
             /*
              * A cart item must represent exactly one
-             * product type.
-             *
-             * Do not allow an ambiguous cart item to
-             * reach the database.
+             * digital product.
              */
             throw new InvalidArgumentException(
-                'A cart item must contain exactly one of book_id or audiobook_id.'
+                'A cart item must contain exactly one of book_id, audiobook_id, or course_id.'
             );
         });
     }
@@ -138,6 +149,14 @@ class CartItem extends Model
     }
 
     /**
+     * Course contained in the cart.
+     */
+    public function course(): BelongsTo
+    {
+        return $this->belongsTo(Course::class);
+    }
+
+    /**
      * Calculate the subtotal from the current
      * unit price and quantity.
      */
@@ -163,5 +182,13 @@ class CartItem extends Model
     public function isAudiobook(): bool
     {
         return $this->item_type === self::TYPE_AUDIOBOOK;
+    }
+
+    /**
+     * Determine whether this cart item is a course.
+     */
+    public function isCourse(): bool
+    {
+        return $this->item_type === self::TYPE_COURSE;
     }
 }

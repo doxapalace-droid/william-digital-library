@@ -33,6 +33,7 @@ return new class extends Migration
              *
              * book
              * audiobook
+             * course
              */
             $table->string('item_type', 20);
 
@@ -40,7 +41,7 @@ return new class extends Migration
              * Book being purchased.
              *
              * Nullable because the order item may
-             * instead represent an audiobook.
+             * represent an audiobook or course instead.
              */
             $table->foreignId('book_id')
                 ->nullable()
@@ -51,11 +52,22 @@ return new class extends Migration
              * Audiobook being purchased.
              *
              * Nullable because the order item may
-             * instead represent a book.
+             * represent a book or course instead.
              */
             $table->foreignId('audiobook_id')
                 ->nullable()
                 ->constrained('audiobooks')
+                ->restrictOnDelete();
+
+            /**
+             * Course being purchased.
+             *
+             * Nullable because the order item may
+             * represent a book or audiobook instead.
+             */
+            $table->foreignId('course_id')
+                ->nullable()
+                ->constrained('courses')
                 ->restrictOnDelete();
 
             /**
@@ -102,6 +114,15 @@ return new class extends Migration
             );
 
             /**
+             * Prevent the same course from appearing
+             * twice in the same order.
+             */
+            $table->unique(
+                ['order_id', 'course_id'],
+                'order_items_order_course_unique'
+            );
+
+            /**
              * Useful indexes.
              */
             $table->index(
@@ -117,6 +138,11 @@ return new class extends Migration
             $table->index(
                 'audiobook_id',
                 'order_items_audiobook_index'
+            );
+
+            $table->index(
+                'course_id',
+                'order_items_course_index'
             );
         });
     }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AudiobookEntitlement;
 use App\Models\BookEntitlement;
+use App\Models\CourseEntitlement;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Services\PaymentGatewayInterface;
@@ -108,7 +109,6 @@ class PaymentController extends Controller
             ->first();
 
         if ($existingPayment) {
-
             /*
              * Already initialized.
              */
@@ -238,7 +238,6 @@ class PaymentController extends Controller
                 $payment
             );
         } catch (RuntimeException $exception) {
-
             $payment->update([
                 'status' => 'failed',
                 'failed_at' => now(),
@@ -323,6 +322,7 @@ class PaymentController extends Controller
             ->with([
                 'order.items.book',
                 'order.items.audiobook.book',
+                'order.items.course',
             ])
             ->firstOrFail();
 
@@ -477,8 +477,9 @@ class PaymentController extends Controller
          * 1. Mark payment successful.
          * 2. Mark order paid.
          * 3. Complete order.
-         * 4. Grant book entitlements.
-         * 5. Grant audiobook entitlements.
+         * 4. Grant book entitlement.
+         * 5. Grant audiobook entitlement.
+         * 6. Grant course entitlement.
          */
         DB::transaction(function () use (
             $payment,
@@ -561,6 +562,37 @@ class PaymentController extends Controller
                             'source' => 'purchase',
                             'can_stream' => true,
                             'can_download' => true,
+                            'status' => 'active',
+                            'granted_at' => now(),
+                            'expires_at' => null,
+                            'revoked_at' => null,
+                        ]
+                    );
+
+                    continue;
+                }
+
+                /*
+                 * COURSE PURCHASE
+                 *
+                 * A successful course purchase grants
+                 * the customer access to the course.
+                 */
+                if (
+                    $item->isCourse()
+                    && $item->course_id
+                ) {
+                    CourseEntitlement::firstOrCreate(
+                        [
+                            'user_id' =>
+                                $order->user_id,
+
+                            'course_id' =>
+                                $item->course_id,
+                        ],
+                        [
+                            'source' => 'purchase',
+                            'can_access' => true,
                             'status' => 'active',
                             'granted_at' => now(),
                             'expires_at' => null,

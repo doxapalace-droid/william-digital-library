@@ -6,6 +6,8 @@ use App\Models\Audiobook;
 use App\Models\AudiobookEntitlement;
 use App\Models\Book;
 use App\Models\BookEntitlement;
+use App\Models\Course;
+use App\Models\CourseEntitlement;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Payment;
@@ -114,6 +116,29 @@ class PaymentControllerTest extends TestCase
     }
 
     /**
+     * Create a published and active course.
+     *
+     * Created directly so this test does not depend on
+     * a CourseFactory existing.
+     */
+    private function createCourse(
+        float $price = 30.00,
+        string $currency = 'USD'
+    ): Course {
+        return Course::create([
+            'title' => 'Test Course',
+            'slug' => 'test-course-' . uniqid(),
+            'subtitle' => 'Test course subtitle.',
+            'description' => 'Test course description.',
+            'cover_image' => 'courses/test.jpg',
+            'price' => $price,
+            'currency' => $currency,
+            'status' => 'active',
+            'published_at' => now()->subMinute(),
+        ]);
+    }
+
+    /**
      * Create an unpaid order.
      */
     private function createOrder(
@@ -171,6 +196,27 @@ class PaymentControllerTest extends TestCase
             'item_type' => 'audiobook',
             'book_id' => null,
             'audiobook_id' => $audiobook->id,
+            'unit_price' => $price,
+            'currency' => $order->currency,
+            'quantity' => 1,
+            'subtotal' => $price,
+        ]);
+    }
+
+    /**
+     * Add a course to an order.
+     */
+    private function addCourseOrderItem(
+        Order $order,
+        Course $course,
+        float $price = 30.00
+    ): OrderItem {
+        return OrderItem::create([
+            'order_id' => $order->id,
+            'item_type' => 'course',
+            'book_id' => null,
+            'audiobook_id' => null,
+            'course_id' => $course->id,
             'unit_price' => $price,
             'currency' => $order->currency,
             'quantity' => 1,
@@ -950,6 +996,94 @@ class PaymentControllerTest extends TestCase
                 'source' => 'purchase',
                 'can_stream' => true,
                 'can_download' => true,
+                'status' => 'active',
+            ]
+        );
+
+        /*
+         * Confirm the payment was marked successful.
+         */
+        $this->assertDatabaseHas('payments', [
+            'id' => $payment->id,
+            'status' => 'successful',
+        ]);
+
+        /*
+         * Confirm the order was marked paid and completed.
+         */
+        $this->assertDatabaseHas('orders', [
+            'id' => $order->id,
+            'payment_status' => 'paid',
+            'status' => 'completed',
+        ]);
+    }
+
+    /**
+     * Successful payment should create an entitlement
+     * for the purchased course.
+     */
+    public function test_successful_payment_creates_course_entitlement(): void
+    {
+        $user = $this->createUser();
+
+        $course = $this->createCourse(
+            30.00,
+            'USD'
+        );
+
+        $order = $this->createOrder(
+            $user,
+            30.00,
+            0.00,
+            30.00,
+            'USD'
+        );
+
+        $this->addCourseOrderItem(
+            $order,
+            $course,
+            30.00
+        );
+
+        $payment = Payment::create([
+            'order_id' => $order->id,
+            'user_id' => $user->id,
+            'gateway' => 'paystack',
+
+            /*
+             * MUST match the fake Paystack verification response.
+             */
+            'transaction_reference' => 'DP-TEST-REFERENCE',
+
+            'status' => 'pending',
+            'currency' => 'USD',
+            'amount' => 30.00,
+            'gateway_response' => null,
+            'paid_at' => null,
+            'failed_at' => null,
+        ]);
+
+        Sanctum::actingAs($user);
+
+        /*
+         * VERIFY IS A POST ENDPOINT.
+         */
+        $response = $this->postJson(
+            "/api/payments/{$payment->uuid}/verify"
+        );
+
+        $response->assertOk();
+
+        /*
+         * Confirm the course entitlement was created.
+         */
+        $this->assertDatabaseHas(
+            'course_entitlements',
+            [
+                'user_id' => $user->id,
+                'course_id' => $course->id,
+                'source' => 'purchase',
+                'can_access' => true,
                 'status' => 'active',
             ]
         );

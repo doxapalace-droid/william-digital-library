@@ -13,6 +13,15 @@ class OrderItem extends Model
     use HasUuid;
 
     /**
+     * Supported order item types.
+     */
+    public const TYPE_BOOK = 'book';
+
+    public const TYPE_AUDIOBOOK = 'audiobook';
+
+    public const TYPE_COURSE = 'course';
+
+    /**
      * Attributes that may be mass assigned.
      */
     protected $fillable = [
@@ -20,6 +29,7 @@ class OrderItem extends Model
         'item_type',
         'book_id',
         'audiobook_id',
+        'course_id',
         'unit_price',
         'currency',
         'quantity',
@@ -36,6 +46,14 @@ class OrderItem extends Model
             'quantity' => 'integer',
             'subtotal' => 'decimal:2',
         ];
+    }
+
+    /**
+     * Use UUID for route model binding.
+     */
+    public function getRouteKeyName(): string
+    {
+        return 'uuid';
     }
 
     /**
@@ -63,11 +81,19 @@ class OrderItem extends Model
     }
 
     /**
+     * Course being purchased.
+     */
+    public function course(): BelongsTo
+    {
+        return $this->belongsTo(Course::class);
+    }
+
+    /**
      * Determine whether this order item is a book.
      */
     public function isBook(): bool
     {
-        return $this->item_type === 'book';
+        return $this->item_type === self::TYPE_BOOK;
     }
 
     /**
@@ -75,6 +101,14 @@ class OrderItem extends Model
      */
     public function isAudiobook(): bool
     {
-        return $this->item_type === 'audiobook';
+        return $this->item_type === self::TYPE_AUDIOBOOK;
+    }
+
+    /**
+     * Determine whether this order item is a course.
+     */
+    public function isCourse(): bool
+    {
+        return $this->item_type === self::TYPE_COURSE;
     }
 }

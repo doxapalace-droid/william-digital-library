@@ -15,8 +15,16 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
-#[Fillable(['name', 'email', 'password', 'role_id'])]
-#[Hidden(['password', 'remember_token'])]
+#[Fillable([
+    'name',
+    'email',
+    'password',
+    'role_id',
+])]
+#[Hidden([
+    'password',
+    'remember_token',
+])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
@@ -85,8 +93,13 @@ class User extends Authenticatable
             ->where('status', 'active')
             ->where('can_read', true)
             ->where(function ($query) {
-                $query->whereNull('expires_at')
-                    ->orWhere('expires_at', '>', now());
+                $query
+                    ->whereNull('expires_at')
+                    ->orWhere(
+                        'expires_at',
+                        '>',
+                        now()
+                    );
             })
             ->exists();
     }
@@ -115,9 +128,6 @@ class User extends Authenticatable
 
     /**
      * Reading progress records belonging to this user.
-     *
-     * Each record tracks the user's current position
-     * and progress in a particular book.
      */
     public function readingProgress(): HasMany
     {
