@@ -25,6 +25,8 @@ use App\Http\Controllers\Api\HighlightController;
 use App\Http\Controllers\Api\MyLibraryController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PaymentController;
+use App\Http\Controllers\Api\PodcastController;
+use App\Http\Controllers\Api\PodcastEpisodeController;
 use App\Http\Controllers\Api\ReaderPreferenceController;
 use App\Http\Controllers\Api\ReadingNoteController;
 use App\Http\Controllers\Api\ReadingProgressController;
@@ -162,6 +164,42 @@ Route::get('/videos', [
 
 Route::get('/videos/{video}', [
     VideoController::class,
+    'show',
+]);
+
+
+/*
+|--------------------------------------------------------------------------
+| Public Podcasts
+|--------------------------------------------------------------------------
+|
+| Podcasts are the library's free-content area.
+|
+| Visitors can browse podcasts and their publicly
+| available episodes without authentication.
+|
+| Private audio/video file paths are never exposed
+| through these catalogue endpoints.
+|
+*/
+
+Route::get('/podcasts', [
+    PodcastController::class,
+    'index',
+]);
+
+Route::get('/podcasts/{podcast}', [
+    PodcastController::class,
+    'show',
+]);
+
+Route::get('/podcasts/{podcast}/episodes', [
+    PodcastEpisodeController::class,
+    'index',
+]);
+
+Route::get('/podcasts/{podcast}/episodes/{episode}', [
+    PodcastEpisodeController::class,
     'show',
 ]);
 
