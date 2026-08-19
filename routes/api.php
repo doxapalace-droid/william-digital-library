@@ -27,6 +27,7 @@ use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\PodcastController;
 use App\Http\Controllers\Api\PodcastEpisodeController;
+use App\Http\Controllers\Api\PodcastEpisodeProgressController;
 use App\Http\Controllers\Api\PodcastStreamController;
 use App\Http\Controllers\Api\ReaderPreferenceController;
 use App\Http\Controllers\Api\ReadingNoteController;
@@ -176,8 +177,8 @@ Route::get('/videos/{video}', [
 |
 | Podcasts are the library's free-content area.
 |
-| Visitors can browse podcasts and their publicly
-| available episodes without authentication.
+| Visitors can browse podcasts and publicly available
+| episodes without authentication.
 |
 | Private audio/video file paths are never exposed
 | through catalogue endpoints.
@@ -746,6 +747,94 @@ Route::middleware('auth:sanctum')->group(function () {
         AudiobookListeningProgressController::class,
         'update',
     ]);
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Podcast Episode Progress
+    |--------------------------------------------------------------------------
+    |
+    | Podcast content is free, but playback progress belongs
+    | to the authenticated user.
+    |
+    | This allows the application to provide:
+    |
+    | - Continue Listening
+    | - Resume playback
+    | - Playback position
+    | - Completion tracking
+    | - Listening history
+    |
+    */
+
+    /*
+    |--------------------------------------------------------------------------
+    | Continue Listening
+    |--------------------------------------------------------------------------
+    |
+    | Returns podcast episodes that the authenticated
+    | user has started but has not completed.
+    |
+    */
+
+    Route::get('/podcast-progress/continue-listening', [
+        PodcastEpisodeProgressController::class,
+        'continueListening',
+    ]);
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Episode Progress
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get(
+        '/podcasts/{podcast}/episodes/{episode}/progress',
+        [
+            PodcastEpisodeProgressController::class,
+            'show',
+        ]
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Save / Update Episode Progress
+    |--------------------------------------------------------------------------
+    |
+    | Saves:
+    |
+    | - playback position
+    | - duration
+    | - progress percentage
+    | - completion state
+    | - last played time
+    |
+    */
+
+    Route::put(
+        '/podcasts/{podcast}/episodes/{episode}/progress',
+        [
+            PodcastEpisodeProgressController::class,
+            'update',
+        ]
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Complete Episode
+    |--------------------------------------------------------------------------
+    */
+
+    Route::post(
+        '/podcasts/{podcast}/episodes/{episode}/progress/complete',
+        [
+            PodcastEpisodeProgressController::class,
+            'complete',
+        ]
+    );
 
 
     /*

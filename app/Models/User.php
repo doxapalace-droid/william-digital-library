@@ -84,6 +84,17 @@ class User extends Authenticatable
     }
 
     /**
+     * Podcast listening progress records belonging to this user.
+     */
+    public function podcastEpisodeProgress(): HasMany
+    {
+        return $this->hasMany(
+            PodcastEpisodeProgress::class,
+            'user_id'
+        );
+    }
+
+    /**
      * Determine whether the user can read the given book.
      */
     public function canReadBook(Book $book): bool

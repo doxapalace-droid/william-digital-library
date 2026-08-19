@@ -6,6 +6,7 @@ use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class PodcastEpisode extends Model
 {
@@ -48,6 +49,17 @@ class PodcastEpisode extends Model
     }
 
     /**
+     * Listening progress records for this episode.
+     */
+    public function progress(): HasMany
+    {
+        return $this->hasMany(
+            PodcastEpisodeProgress::class,
+            'podcast_episode_id'
+        );
+    }
+
+    /**
      * Attribute casting.
      */
     protected function casts(): array
@@ -56,13 +68,12 @@ class PodcastEpisode extends Model
             'duration_seconds' => 'integer',
             'is_free' => 'boolean',
             'is_featured' => 'boolean',
-            'episode_number' => 'integer',
             'published_at' => 'datetime',
         ];
     }
 
     /**
-     * Determine whether the episode itself is active.
+     * Determine whether the episode is currently active.
      */
     public function isActive(): bool
     {
@@ -81,14 +92,21 @@ class PodcastEpisode extends Model
     }
 
     /**
-     * Determine whether both the episode and its
-     * parent podcast are publicly available.
+     * Determine whether this episode is publicly available.
+     *
+     * Both the episode and its parent podcast
+     * must be active and published.
      */
     public function isPubliclyAvailable(): bool
     {
+        $podcast = $this->podcast;
+
+        if ($podcast === null) {
+            return false;
+        }
+
         return $this->isActive()
-            && $this->podcast !== null
-            && $this->podcast->isPubliclyAvailable();
+            && $podcast->isActive();
     }
 
     /**
@@ -108,8 +126,7 @@ class PodcastEpisode extends Model
     }
 
     /**
-     * Determine whether the episode has either
-     * audio or video content.
+     * Determine whether the episode has any media.
      */
     public function hasMedia(): bool
     {
@@ -118,7 +135,23 @@ class PodcastEpisode extends Model
     }
 
     /**
-     * Get duration in minutes.
+     * Get the episode artwork.
+     *
+     * Priority:
+     *
+     * 1. Episode artwork
+     * 2. Podcast artwork
+     * 3. Default podcast artwork
+     */
+    public function artwork(): string
+    {
+        return $this->cover_image
+            ?: $this->podcast?->cover_image
+            ?: 'podcasts/default.jpg';
+    }
+
+    /**
+     * Get the duration in minutes.
      */
     public function durationInMinutes(): float
     {
@@ -126,17 +159,5 @@ class PodcastEpisode extends Model
             ((int) $this->duration_seconds) / 60,
             2
         );
-    }
-
-    /**
-     * Get the episode artwork.
-     *
-     * Episode artwork takes priority over the
-     * parent podcast artwork.
-     */
-    public function artwork(): ?string
-    {
-        return $this->cover_image
-            ?? $this->podcast?->cover_image;
     }
 }
