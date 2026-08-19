@@ -27,6 +27,7 @@ use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\PodcastController;
 use App\Http\Controllers\Api\PodcastEpisodeController;
+use App\Http\Controllers\Api\PodcastStreamController;
 use App\Http\Controllers\Api\ReaderPreferenceController;
 use App\Http\Controllers\Api\ReadingNoteController;
 use App\Http\Controllers\Api\ReadingProgressController;
@@ -179,7 +180,7 @@ Route::get('/videos/{video}', [
 | available episodes without authentication.
 |
 | Private audio/video file paths are never exposed
-| through these catalogue endpoints.
+| through catalogue endpoints.
 |
 */
 
@@ -202,6 +203,46 @@ Route::get('/podcasts/{podcast}/episodes/{episode}', [
     PodcastEpisodeController::class,
     'show',
 ]);
+
+
+/*
+|--------------------------------------------------------------------------
+| Public Podcast Streaming
+|--------------------------------------------------------------------------
+|
+| Podcast content is free.
+|
+| Authentication is therefore NOT required.
+|
+| The actual audio/video files remain in private storage.
+| These controlled endpoints stream the files without
+| exposing their physical storage paths.
+|
+| HTTP Range requests are supported for:
+|
+| - seeking
+| - pausing
+| - resuming
+| - browser media players
+| - podcast applications
+|
+*/
+
+Route::get(
+    '/podcasts/{podcast}/episodes/{episode}/audio',
+    [
+        PodcastStreamController::class,
+        'audio',
+    ]
+)->name('podcasts.episodes.audio');
+
+Route::get(
+    '/podcasts/{podcast}/episodes/{episode}/video',
+    [
+        PodcastStreamController::class,
+        'video',
+    ]
+)->name('podcasts.episodes.video');
 
 
 /*
@@ -667,7 +708,8 @@ Route::middleware('auth:sanctum')->group(function () {
     | Audiobook Streaming
     |--------------------------------------------------------------------------
     |
-    | Private audio is streamed through the controller.
+    | Private audiobook audio is streamed only to
+    | customers with valid entitlements.
     |
     */
 
@@ -740,10 +782,6 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     | Course Progress Summary
     |--------------------------------------------------------------------------
-    |
-    | Returns the authenticated user's complete progress
-    | for the selected course.
-    |
     */
 
     Route::get('/courses/{course}/progress', [
@@ -756,10 +794,6 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     | Individual Lesson Progress
     |--------------------------------------------------------------------------
-    |
-    | Returns the authenticated user's progress for
-    | a particular lesson.
-    |
     */
 
     Route::get(

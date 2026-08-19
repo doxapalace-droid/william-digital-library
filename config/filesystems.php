@@ -74,6 +74,27 @@ return [
 
         /*
         |--------------------------------------------------------------------------
+        | Private Podcast Files
+        |--------------------------------------------------------------------------
+        |
+        | Used for podcast audio and video files.
+        |
+        | Podcast media must remain private and should only be
+        | delivered through the controlled podcast streaming
+        | endpoints.
+        |
+        */
+
+        'podcasts' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private/podcasts'),
+            'serve' => false,
+            'throw' => false,
+            'report' => false,
+        ],
+
+        /*
+        |--------------------------------------------------------------------------
         | Public Files
         |--------------------------------------------------------------------------
         |
@@ -81,6 +102,7 @@ return [
         |
         | - Book covers
         | - Audiobook artwork
+        | - Podcast artwork
         | - Author images
         | - Other catalogue images
         |
