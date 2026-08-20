@@ -23,6 +23,7 @@ use App\Http\Controllers\Api\CourseLessonProgressController;
 use App\Http\Controllers\Api\FavoriteController;
 use App\Http\Controllers\Api\FreeProductController;
 use App\Http\Controllers\Api\HighlightController;
+use App\Http\Controllers\Api\MembershipPlanController;
 use App\Http\Controllers\Api\MyLibraryController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PaymentController;
@@ -36,6 +37,7 @@ use App\Http\Controllers\Api\ReadingProgressController;
 use App\Http\Controllers\Api\RecommendationController;
 use App\Http\Controllers\Api\RecentlyViewedController;
 use App\Http\Controllers\Api\ReviewController;
+use App\Http\Controllers\Api\SubscriptionController;
 use App\Http\Controllers\Api\VideoController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -238,6 +240,31 @@ Route::get('/courses/{course}', [
 
 Route::get('/courses/{course}/lessons/{lesson}', [
     CourseLessonController::class,
+    'show',
+]);
+
+
+/*
+|--------------------------------------------------------------------------
+| MEMBERSHIP PLANS
+|--------------------------------------------------------------------------
+|
+| Membership plans are public catalogue data.
+|
+| Customers can:
+|
+| - view all published plans
+| - view one published plan
+|
+*/
+
+Route::get('/membership-plans', [
+    MembershipPlanController::class,
+    'index',
+]);
+
+Route::get('/membership-plans/{membershipPlan}', [
+    MembershipPlanController::class,
     'show',
 ]);
 
@@ -471,6 +498,35 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/orders/{uuid}', [
         OrderController::class,
         'show',
+    ]);
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Membership Subscriptions
+    |--------------------------------------------------------------------------
+    |
+    | Customers can:
+    |
+    | - view their current subscription
+    | - create a subscription
+    | - cancel their subscription
+    |
+    */
+
+    Route::get('/subscription', [
+        SubscriptionController::class,
+        'current',
+    ]);
+
+    Route::post('/subscriptions', [
+        SubscriptionController::class,
+        'store',
+    ]);
+
+    Route::post('/subscriptions/{subscription}/cancel', [
+        SubscriptionController::class,
+        'cancel',
     ]);
 
 

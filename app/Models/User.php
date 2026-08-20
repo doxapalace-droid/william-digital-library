@@ -32,8 +32,6 @@ class User extends Authenticatable
 
     /**
      * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
      */
     protected function casts(): array
     {
@@ -210,11 +208,11 @@ class User extends Authenticatable
     }
 
     /**
- * Coupon redemptions made by this customer.
- */
+     * Coupon redemptions made by this customer.
+     */
     public function couponUsages(): HasMany
     {
-    return $this->hasMany(CouponUsage::class);
+        return $this->hasMany(CouponUsage::class);
     }
 
     /**
@@ -223,5 +221,50 @@ class User extends Authenticatable
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);
+    }
+
+    /**
+     * Membership subscriptions belonging to this customer.
+     */
+    public function subscriptions(): HasMany
+    {
+        return $this->hasMany(Subscription::class);
+    }
+
+    /**
+     * Determine whether the customer currently has
+     * an active membership subscription.
+     *
+     * Trialing and active subscriptions grant membership
+     * access while they remain within their valid period.
+     */
+    public function hasActiveSubscription(): bool
+    {
+        return $this->subscriptions()
+            ->whereIn('status', [
+                Subscription::STATUS_TRIALING,
+                Subscription::STATUS_ACTIVE,
+                Subscription::STATUS_PAST_DUE,
+            ])
+            ->whereNull('cancelled_at')
+            ->where(function ($query) {
+                $query
+                    ->whereNull('expires_at')
+                    ->orWhere(
+                        'expires_at',
+                        '>',
+                        now()
+                    );
+            })
+            ->where(function ($query) {
+                $query
+                    ->whereNull('current_period_end')
+                    ->orWhere(
+                        'current_period_end',
+                        '>',
+                        now()
+                    );
+            })
+            ->exists();
     }
 }
