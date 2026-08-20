@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\CourseController;
 use App\Http\Controllers\Api\CourseLessonController;
 use App\Http\Controllers\Api\CourseLessonProgressController;
 use App\Http\Controllers\Api\FavoriteController;
+use App\Http\Controllers\Api\FreeProductController;
 use App\Http\Controllers\Api\HighlightController;
 use App\Http\Controllers\Api\MyLibraryController;
 use App\Http\Controllers\Api\OrderController;
@@ -573,6 +574,37 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/checkout', [
         CheckoutController::class,
         'store',
+    ]);
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Free Products
+    |--------------------------------------------------------------------------
+    |
+    | Free products do not go through checkout or payment.
+    |
+    | A successful claim creates the appropriate entitlement:
+    |
+    | - Book        -> BookEntitlement
+    | - Audiobook   -> AudiobookEntitlement
+    | - Course      -> CourseEntitlement
+    |
+    */
+
+    Route::post('/free-products/books/{book}/claim', [
+        FreeProductController::class,
+        'claimBook',
+    ]);
+
+    Route::post('/free-products/audiobooks/{audiobook}/claim', [
+        FreeProductController::class,
+        'claimAudiobook',
+    ]);
+
+    Route::post('/free-products/courses/{course}/claim', [
+        FreeProductController::class,
+        'claimCourse',
     ]);
 
 

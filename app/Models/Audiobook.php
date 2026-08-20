@@ -22,6 +22,7 @@ class Audiobook extends Model
         'cover_image',
         'price',
         'currency',
+        'is_free',
         'status',
         'duration_seconds',
         'published_at',
@@ -34,6 +35,7 @@ class Audiobook extends Model
     {
         return [
             'price' => 'decimal:2',
+            'is_free' => 'boolean',
             'duration_seconds' => 'integer',
             'published_at' => 'datetime',
         ];
@@ -102,13 +104,27 @@ class Audiobook extends Model
     }
 
     /**
+     * Determine whether this audiobook is free.
+     *
+     * Free status is explicitly controlled by is_free.
+     * Price alone does not determine whether an audiobook is free.
+     */
+    public function isFree(): bool
+    {
+        return $this->is_free === true;
+    }
+
+    /**
      * Determine whether the audiobook is available
-     * for purchase.
+     * for purchase or free acquisition.
      */
     public function isPurchasable(): bool
     {
         return $this->isActive()
-            && (float) $this->price >= 0;
+            && (
+                $this->isFree()
+                || (float) $this->price >= 0
+            );
     }
 
     /**

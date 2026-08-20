@@ -31,6 +31,7 @@ class Book extends Model
         'pdf_path',
         'price',
         'currency',
+        'is_free',
         'is_featured',
         'is_published',
         'published_at',
@@ -97,7 +98,7 @@ class Book extends Model
     }
 
     /**
-     * Highlights created for this book.
+     * Highlights created by customers for this book.
      */
     public function highlights(): HasMany
     {
@@ -151,11 +152,40 @@ class Book extends Model
     {
         return [
             'price' => 'decimal:2',
+            'is_free' => 'boolean',
             'is_featured' => 'boolean',
             'is_published' => 'boolean',
             'published_at' => 'datetime',
             'average_rating' => 'float',
             'reviews_count' => 'integer',
         ];
+    }
+
+    /**
+     * Determine whether this book is free.
+     *
+     * Free status is explicitly controlled by is_free.
+     * Price alone does not determine whether a book is free.
+     */
+    public function isFree(): bool
+    {
+        return $this->is_free === true;
+    }
+
+    /**
+     * Determine whether this book is available
+     * for purchase or free acquisition.
+     */
+    public function isPurchasable(): bool
+    {
+        return $this->is_published
+            && (
+                $this->published_at === null
+                || $this->published_at->isPast()
+            )
+            && (
+                $this->isFree()
+                || (float) $this->price >= 0
+            );
     }
 }

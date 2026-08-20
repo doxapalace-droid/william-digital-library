@@ -23,6 +23,7 @@ class Course extends Model
         'cover_image',
         'price',
         'currency',
+        'is_free',
         'status',
         'published_at',
     ];
@@ -77,6 +78,7 @@ class Course extends Model
     {
         return [
             'price' => 'decimal:2',
+            'is_free' => 'boolean',
             'published_at' => 'datetime',
         ];
     }
@@ -106,13 +108,27 @@ class Course extends Model
     }
 
     /**
+     * Determine whether this course is free.
+     *
+     * Free status is explicitly controlled by is_free.
+     * Price alone does not determine whether a course is free.
+     */
+    public function isFree(): bool
+    {
+        return $this->is_free === true;
+    }
+
+    /**
      * Determine whether the course is available
-     * for purchase.
+     * for purchase or free acquisition.
      */
     public function isPurchasable(): bool
     {
         return $this->isActive()
-            && (float) $this->price >= 0;
+            && (
+                $this->isFree()
+                || (float) $this->price >= 0
+            );
     }
 
     /**
