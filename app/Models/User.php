@@ -210,6 +210,14 @@ class User extends Authenticatable
     }
 
     /**
+ * Coupon redemptions made by this customer.
+ */
+    public function couponUsages(): HasMany
+    {
+    return $this->hasMany(CouponUsage::class);
+    }
+
+    /**
      * Payments belonging to this user.
      */
     public function payments(): HasMany

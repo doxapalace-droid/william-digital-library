@@ -9,13 +9,20 @@ use App\Models\CartItem;
 use App\Models\CourseEntitlement;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Services\CouponService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use RuntimeException;
 
 class CheckoutController extends Controller
 {
+    public function __construct(
+        protected CouponService $couponService
+    ) {
+    }
+
     /**
      * Display the authenticated user's checkout summary.
      *
@@ -43,18 +50,13 @@ class CheckoutController extends Controller
                     'subtotal' => '0.00',
                     'discount' => '0.00',
                     'total' => '0.00',
+                    'coupon' => null,
                 ],
             ], 422);
         }
 
         $this->ensureSingleCurrency($cartItems);
 
-        /*
-         * Validate the current state of every item.
-         *
-         * This catches products that may have become
-         * unavailable after being added to the cart.
-         */
         foreach ($cartItems as $cartItem) {
             $this->validateCartItem(
                 $cartItem,
@@ -86,6 +88,8 @@ class CheckoutController extends Controller
                 'total' => $this->formatMoney(
                     $subtotal
                 ),
+
+                'coupon' => null,
             ],
         ]);
     }
@@ -96,166 +100,233 @@ class CheckoutController extends Controller
      *
      * Payment is NOT processed here.
      *
-     * The cart is cleared only after the order and
-     * all order items have been created successfully.
+     * If a coupon code is supplied, it is validated
+     * and applied after the order items have been created.
      */
     public function store(Request $request): JsonResponse
     {
+        $validated = $request->validate([
+            'coupon_code' => [
+                'nullable',
+                'string',
+                'max:50',
+            ],
+        ]);
+
         $user = $request->user();
 
-        $order = DB::transaction(function () use ($user) {
-            /*
-             * Load the user's current cart.
-             */
-            $cartItems = $this->getValidCartItems(
-                $user->id
-            );
+        $couponCode = isset($validated['coupon_code'])
+            ? trim($validated['coupon_code'])
+            : null;
 
-            /*
-             * Checkout cannot proceed with an empty cart.
-             */
-            if ($cartItems->isEmpty()) {
-                throw ValidationException::withMessages([
-                    'cart' => [
-                        'Your cart is empty.',
-                    ],
-                ]);
-            }
-
-            /*
-             * All products in one order must use
-             * the same currency.
-             */
-            $this->ensureSingleCurrency(
-                $cartItems
-            );
-
-            /*
-             * Validate every product again immediately
-             * before creating the order.
-             *
-             * This is important because the cart may have
-             * changed since the checkout summary was viewed.
-             */
-            foreach ($cartItems as $cartItem) {
-                $this->validateCartItem(
-                    $cartItem,
+        try {
+            $order = DB::transaction(function () use (
+                $user,
+                $couponCode
+            ) {
+                /*
+                 * Load the user's current cart.
+                 */
+                $cartItems = $this->getValidCartItems(
                     $user->id
                 );
-            }
 
-            /*
-             * Calculate the order subtotal from the
-             * captured cart prices.
-             */
-            $subtotal = $this->calculateSubtotal(
-                $cartItems
-            );
+                /*
+                 * Checkout cannot proceed with an empty cart.
+                 */
+                if ($cartItems->isEmpty()) {
+                    throw ValidationException::withMessages([
+                        'cart' => [
+                            'Your cart is empty.',
+                        ],
+                    ]);
+                }
 
-            /*
-             * Discounts will be introduced later when
-             * coupon/discount functionality is built.
-             */
-            $discount = 0.00;
+                /*
+                 * All products in one order must use
+                 * the same currency.
+                 */
+                $this->ensureSingleCurrency(
+                    $cartItems
+                );
 
-            $total = round(
-                $subtotal - $discount,
-                2
-            );
+                /*
+                 * Validate every product again immediately
+                 * before creating the order.
+                 */
+                foreach ($cartItems as $cartItem) {
+                    $this->validateCartItem(
+                        $cartItem,
+                        $user->id
+                    );
+                }
 
-            /*
-             * Create the pending order.
-             */
-            $order = Order::create([
-                'user_id' => $user->id,
+                /*
+                 * Calculate the order subtotal from the
+                 * captured cart prices.
+                 */
+                $subtotal = $this->calculateSubtotal(
+                    $cartItems
+                );
 
-                'order_number' =>
-                    $this->generateOrderNumber(),
+                /*
+                 * Create the pending order.
+                 *
+                 * The initial discount is zero. If a coupon
+                 * is supplied, CouponService will update the
+                 * discount and total after order items exist.
+                 */
+                $order = Order::create([
+                    'user_id' => $user->id,
 
-                'status' => 'pending',
+                    'order_number' =>
+                        $this->generateOrderNumber(),
 
-                'payment_status' => 'unpaid',
+                    'status' => 'pending',
 
-                'currency' => strtoupper(
-                    $cartItems->first()->currency
-                ),
-
-                'subtotal' => $subtotal,
-
-                'discount' => $discount,
-
-                'total' => $total,
-
-                'paid_at' => null,
-            ]);
-
-            /*
-             * Convert every cart item into an order item.
-             *
-             * IMPORTANT:
-             * The item_type, book_id, audiobook_id and
-             * course_id are all preserved.
-             *
-             * Prices are copied from the cart snapshot.
-             */
-            foreach ($cartItems as $cartItem) {
-                OrderItem::create([
-                    'order_id' => $order->id,
-
-                    'item_type' => $cartItem->item_type,
-
-                    'book_id' => $cartItem->book_id,
-
-                    'audiobook_id' =>
-                        $cartItem->audiobook_id,
-
-                    'course_id' =>
-                        $cartItem->course_id,
-
-                    'unit_price' =>
-                        $cartItem->unit_price,
+                    'payment_status' => 'unpaid',
 
                     'currency' => strtoupper(
-                        $cartItem->currency
+                        $cartItems->first()->currency
                     ),
 
-                    'quantity' =>
-                        $cartItem->quantity,
+                    'subtotal' => $subtotal,
 
-                    'subtotal' =>
-                        $cartItem->subtotal,
+                    'discount' => 0.00,
+
+                    'total' => $subtotal,
+
+                    'paid_at' => null,
                 ]);
-            }
 
-            /*
-             * Clear the cart only after the order and
-             * order items have been successfully created.
-             *
-             * If anything above fails, the transaction
-             * rolls back and the cart remains intact.
-             */
-            CartItem::query()
-                ->where('user_id', $user->id)
-                ->delete();
+                /*
+                 * Convert every cart item into an order item.
+                 *
+                 * IMPORTANT:
+                 * The item_type, product IDs and captured
+                 * prices are preserved.
+                 */
+                foreach ($cartItems as $cartItem) {
+                    OrderItem::create([
+                        'order_id' => $order->id,
 
-            /*
-             * Load relationships required by the
-             * customer-facing response.
-             */
-            $order->load([
-                'items.book:id,uuid,title,slug,subtitle,author,cover_image,price,currency',
+                        'item_type' =>
+                            $cartItem->item_type,
 
-                'items.audiobook' => function ($query) {
-                    $query->with([
-                        'book:id,uuid,title,slug,subtitle,author,cover_image',
+                        'book_id' =>
+                            $cartItem->book_id,
+
+                        'audiobook_id' =>
+                            $cartItem->audiobook_id,
+
+                        'course_id' =>
+                            $cartItem->course_id,
+
+                        'unit_price' =>
+                            $cartItem->unit_price,
+
+                        'currency' => strtoupper(
+                            $cartItem->currency
+                        ),
+
+                        'quantity' =>
+                            $cartItem->quantity,
+
+                        'subtotal' =>
+                            $cartItem->subtotal,
                     ]);
-                },
+                }
 
-                'items.course:id,uuid,title,slug,subtitle,description,cover_image,price,currency,status,published_at',
+                /*
+                 * Apply the coupon only after the order items
+                 * have been created.
+                 *
+                 * CouponService handles:
+                 *
+                 * - coupon validity
+                 * - usage limits
+                 * - per-user limits
+                 * - minimum order amount
+                 * - product restrictions
+                 * - discount calculation
+                 * - order discount
+                 * - order total
+                 * - coupon usage record
+                 * - coupon usage count
+                 */
+                if (
+                    $couponCode !== null
+                    && $couponCode !== ''
+                ) {
+                    try {
+                        $this->couponService->apply(
+                            $couponCode,
+                            $user,
+                            $order
+                        );
+                    } catch (RuntimeException $exception) {
+                        throw ValidationException::withMessages([
+                            'coupon_code' => [
+                                $exception->getMessage(),
+                            ],
+                        ]);
+                    }
+                }
+
+                /*
+                 * Clear the cart only after the order,
+                 * order items and coupon processing have
+                 * succeeded.
+                 *
+                 * If anything fails, the transaction rolls
+                 * back and the cart remains intact.
+                 */
+                CartItem::query()
+                    ->where('user_id', $user->id)
+                    ->delete();
+
+                /*
+                 * Reload the order with all relationships
+                 * required by the customer-facing response.
+                 */
+                $order->load([
+                    'items.book:id,uuid,title,slug,subtitle,author,cover_image,price,currency',
+
+                    'items.audiobook' => function ($query) {
+                        $query->with([
+                            'book:id,uuid,title,slug,subtitle,author,cover_image',
+                        ]);
+                    },
+
+                    'items.course:id,uuid,title,slug,subtitle,description,cover_image,price,currency,status,published_at',
+                ]);
+
+                /*
+                 * Load the coupon usage relationship if the
+                 * relationship exists on the Order model.
+                 */
+                if (
+                    method_exists(
+                        $order,
+                        'couponUsages'
+                    )
+                ) {
+                    $order->load('couponUsages');
+                }
+
+                return $order->fresh();
+            });
+
+        } catch (ValidationException $exception) {
+            throw $exception;
+
+        } catch (RuntimeException $exception) {
+            throw ValidationException::withMessages([
+                'coupon_code' => [
+                    $exception->getMessage(),
+                ],
             ]);
-
-            return $order;
-        });
+        }
 
         return response()->json([
             'message' =>
@@ -299,9 +370,6 @@ class CheckoutController extends Controller
         CartItem $cartItem,
         int $userId
     ): void {
-        /*
-         * Quantity must always be at least one.
-         */
         if ($cartItem->quantity < 1) {
             throw ValidationException::withMessages([
                 'cart' => [
@@ -310,9 +378,6 @@ class CheckoutController extends Controller
             ]);
         }
 
-        /*
-         * Captured price cannot be negative.
-         */
         if ((float) $cartItem->unit_price < 0) {
             throw ValidationException::withMessages([
                 'cart' => [
@@ -321,9 +386,6 @@ class CheckoutController extends Controller
             ]);
         }
 
-        /*
-         * Currency must be present.
-         */
         if (! $cartItem->currency) {
             throw ValidationException::withMessages([
                 'cart' => [
@@ -332,9 +394,6 @@ class CheckoutController extends Controller
             ]);
         }
 
-        /*
-         * Validate book cart item.
-         */
         if ($cartItem->isBook()) {
             $this->validateBookCartItem(
                 $cartItem,
@@ -344,9 +403,6 @@ class CheckoutController extends Controller
             return;
         }
 
-        /*
-         * Validate audiobook cart item.
-         */
         if ($cartItem->isAudiobook()) {
             $this->validateAudiobookCartItem(
                 $cartItem,
@@ -356,9 +412,6 @@ class CheckoutController extends Controller
             return;
         }
 
-        /*
-         * Validate course cart item.
-         */
         if ($cartItem->isCourse()) {
             $this->validateCourseCartItem(
                 $cartItem,
@@ -368,9 +421,6 @@ class CheckoutController extends Controller
             return;
         }
 
-        /*
-         * Unknown cart item type.
-         */
         throw ValidationException::withMessages([
             'cart' => [
                 'Your cart contains an invalid product type.',
@@ -387,10 +437,6 @@ class CheckoutController extends Controller
     ): void {
         $book = $cartItem->book;
 
-        /*
-         * The book may have been unpublished after
-         * it was added to the cart.
-         */
         if (
             ! $book
             || ! $book->is_published
@@ -409,10 +455,6 @@ class CheckoutController extends Controller
             ]);
         }
 
-        /*
-         * A customer cannot purchase a book they
-         * already own through an active entitlement.
-         */
         $alreadyOwnsBook = BookEntitlement::query()
             ->where('user_id', $userId)
             ->where('book_id', $book->id)
@@ -448,9 +490,6 @@ class CheckoutController extends Controller
     ): void {
         $audiobook = $cartItem->audiobook;
 
-        /*
-         * The audiobook must exist.
-         */
         if (! $audiobook) {
             throw ValidationException::withMessages([
                 'cart' => [
@@ -459,9 +498,6 @@ class CheckoutController extends Controller
             ]);
         }
 
-        /*
-         * Audiobook must currently be active.
-         */
         if (! $audiobook->isActive()) {
             throw ValidationException::withMessages([
                 'cart' => [
@@ -470,9 +506,6 @@ class CheckoutController extends Controller
             ]);
         }
 
-        /*
-         * Audiobook must be purchasable.
-         */
         if (! $audiobook->isPurchasable()) {
             throw ValidationException::withMessages([
                 'cart' => [
@@ -481,10 +514,6 @@ class CheckoutController extends Controller
             ]);
         }
 
-        /*
-         * A customer cannot purchase an audiobook
-         * they already own through an active entitlement.
-         */
         $alreadyOwnsAudiobook =
             AudiobookEntitlement::query()
                 ->where('user_id', $userId)
@@ -524,9 +553,6 @@ class CheckoutController extends Controller
     ): void {
         $course = $cartItem->course;
 
-        /*
-         * The course must exist.
-         */
         if (! $course) {
             throw ValidationException::withMessages([
                 'cart' => [
@@ -535,9 +561,6 @@ class CheckoutController extends Controller
             ]);
         }
 
-        /*
-         * Course must currently be active and published.
-         */
         if (! $course->isActive()) {
             throw ValidationException::withMessages([
                 'cart' => [
@@ -546,9 +569,6 @@ class CheckoutController extends Controller
             ]);
         }
 
-        /*
-         * Course must be purchasable.
-         */
         if (! $course->isPurchasable()) {
             throw ValidationException::withMessages([
                 'cart' => [
@@ -557,10 +577,6 @@ class CheckoutController extends Controller
             ]);
         }
 
-        /*
-         * A customer cannot purchase a course they
-         * already have active access to.
-         */
         $alreadyOwnsCourse =
             CourseEntitlement::query()
                 ->where('user_id', $userId)
@@ -668,11 +684,6 @@ class CheckoutController extends Controller
 
     /**
      * Format a cart item for checkout.
-     *
-     * Supports:
-     * - book
-     * - audiobook
-     * - course
      */
     private function formatCartItem(
         CartItem $cartItem
@@ -705,9 +716,6 @@ class CheckoutController extends Controller
             'course' => null,
         ];
 
-        /*
-         * Book product.
-         */
         if ($cartItem->isBook() && $cartItem->book) {
             $book = $cartItem->book;
 
@@ -736,9 +744,6 @@ class CheckoutController extends Controller
             ];
         }
 
-        /*
-         * Audiobook product.
-         */
         if (
             $cartItem->isAudiobook()
             && $cartItem->audiobook
@@ -788,9 +793,6 @@ class CheckoutController extends Controller
             ];
         }
 
-        /*
-         * Course product.
-         */
         if (
             $cartItem->isCourse()
             && $cartItem->course
@@ -880,11 +882,6 @@ class CheckoutController extends Controller
 
     /**
      * Format an individual order item.
-     *
-     * Supports:
-     * - Books
-     * - Audiobooks
-     * - Courses
      */
     private function formatOrderItem(
         OrderItem $item
@@ -922,9 +919,6 @@ class CheckoutController extends Controller
             'course' => null,
         ];
 
-        /*
-         * Book order item.
-         */
         if ($item->isBook() && $item->book) {
             $book = $item->book;
 
@@ -946,9 +940,6 @@ class CheckoutController extends Controller
             ];
         }
 
-        /*
-         * Audiobook order item.
-         */
         if (
             $item->isAudiobook()
             && $item->audiobook
@@ -991,9 +982,6 @@ class CheckoutController extends Controller
             ];
         }
 
-        /*
-         * Course order item.
-         */
         if (
             $item->isCourse()
             && $item->course

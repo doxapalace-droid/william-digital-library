@@ -109,6 +109,26 @@ class Order extends Model
             ->where('item_type', 'course');
     }
 
+
+    /**
+ * Coupon redemption associated with this order.
+ */
+    public function couponUsage(): HasOne
+    {
+    return $this->hasOne(CouponUsage::class);
+    
+    }
+
+
+    /**
+    * Coupon redemptions associated with this order.
+    */
+    public function couponUsages(): HasMany
+    {
+    return $this->hasMany(CouponUsage::class);
+    }
+
+
     /**
      * Determine whether the order can still be paid.
      */
