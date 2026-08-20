@@ -42,17 +42,14 @@ use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
-| Public Routes
+| PUBLIC API
 |--------------------------------------------------------------------------
-|
-| These routes are available without authentication.
-|
 */
 
 
 /*
 |--------------------------------------------------------------------------
-| Public Book Catalogue
+| Books
 |--------------------------------------------------------------------------
 */
 
@@ -61,27 +58,14 @@ Route::get('/books', [
     'index',
 ]);
 
-
 /*
-|--------------------------------------------------------------------------
-| Book Search
-|--------------------------------------------------------------------------
-|
-| Keep this route before /books/{slug}.
-|
-*/
-
+ * IMPORTANT:
+ * Search must remain before /books/{slug}.
+ */
 Route::get('/books/search', [
     BookController::class,
     'search',
 ]);
-
-
-/*
-|--------------------------------------------------------------------------
-| Public Book Details
-|--------------------------------------------------------------------------
-*/
 
 Route::get('/books/{slug}', [
     BookController::class,
@@ -91,7 +75,7 @@ Route::get('/books/{slug}', [
 
 /*
 |--------------------------------------------------------------------------
-| Public Categories
+| Categories
 |--------------------------------------------------------------------------
 */
 
@@ -108,7 +92,7 @@ Route::get('/categories/{category}', [
 
 /*
 |--------------------------------------------------------------------------
-| Public Authors
+| Authors
 |--------------------------------------------------------------------------
 */
 
@@ -125,10 +109,10 @@ Route::get('/authors/{author}', [
 
 /*
 |--------------------------------------------------------------------------
-| Public Audiobooks
+| Audiobooks
 |--------------------------------------------------------------------------
 |
-| Public audiobook metadata only.
+| These endpoints expose metadata only.
 | Private audio files are never exposed here.
 |
 */
@@ -151,12 +135,8 @@ Route::get('/audiobooks/{audiobook}/chapters', [
 
 /*
 |--------------------------------------------------------------------------
-| Public Videos
+| Videos
 |--------------------------------------------------------------------------
-|
-| Public video metadata only.
-| Private video files are never exposed here.
-|
 */
 
 Route::get('/videos', [
@@ -172,17 +152,8 @@ Route::get('/videos/{video}', [
 
 /*
 |--------------------------------------------------------------------------
-| Public Podcasts
+| Podcasts
 |--------------------------------------------------------------------------
-|
-| Podcasts are the library's free-content area.
-|
-| Visitors can browse podcasts and publicly available
-| episodes without authentication.
-|
-| Private audio/video file paths are never exposed
-| through catalogue endpoints.
-|
 */
 
 Route::get('/podcasts', [
@@ -211,21 +182,9 @@ Route::get('/podcasts/{podcast}/episodes/{episode}', [
 | Public Podcast Streaming
 |--------------------------------------------------------------------------
 |
-| Podcast content is free.
-|
-| Authentication is therefore NOT required.
-|
-| The actual audio/video files remain in private storage.
-| These controlled endpoints stream the files without
-| exposing their physical storage paths.
-|
-| HTTP Range requests are supported for:
-|
-| - seeking
-| - pausing
-| - resuming
-| - browser media players
-| - podcast applications
+| Podcast media remains in private storage.
+| These controllers stream the files without exposing
+| their physical storage paths.
 |
 */
 
@@ -248,11 +207,8 @@ Route::get(
 
 /*
 |--------------------------------------------------------------------------
-| Public Courses
+| Courses
 |--------------------------------------------------------------------------
-|
-| Only active and currently published courses are returned.
-|
 */
 
 Route::get('/courses', [
@@ -268,15 +224,14 @@ Route::get('/courses/{course}', [
 
 /*
 |--------------------------------------------------------------------------
-| Public Course Lesson Access
+| Course Lessons
 |--------------------------------------------------------------------------
 |
-| Preview lessons may be accessed by guests.
+| The lesson controller determines whether the lesson is:
 |
-| Paid lessons are protected by CourseLessonController,
-| which checks authentication and course entitlement.
-|
-| This route MUST remain outside auth:sanctum.
+| - publicly available
+| - a free preview
+| - protected by course entitlement
 |
 */
 
@@ -288,10 +243,13 @@ Route::get('/courses/{course}/lessons/{lesson}', [
 
 /*
 |--------------------------------------------------------------------------
-| Admin Routes
+| ADMIN API
 |--------------------------------------------------------------------------
 |
-| Authentication + admin role required.
+| All routes in this group require:
+|
+| - Sanctum authentication
+| - admin role
 |
 */
 
@@ -302,7 +260,7 @@ Route::middleware([
 
     /*
     |--------------------------------------------------------------------------
-    | Book Management
+    | Books
     |--------------------------------------------------------------------------
     */
 
@@ -324,7 +282,7 @@ Route::middleware([
 
     /*
     |--------------------------------------------------------------------------
-    | Category Management
+    | Categories
     |--------------------------------------------------------------------------
     */
 
@@ -346,8 +304,19 @@ Route::middleware([
 
     /*
     |--------------------------------------------------------------------------
-    | Author Management
+    | Authors
     |--------------------------------------------------------------------------
+    |
+    | IMPORTANT:
+    |
+    | The controller methods receive:
+    |
+    |     Author $author
+    |
+    | Therefore the route parameter must be:
+    |
+    |     {author}
+    |
     */
 
     Route::post('/authors', [
@@ -360,6 +329,11 @@ Route::middleware([
         'update',
     ]);
 
+    Route::patch('/authors/{author}', [
+        AuthorController::class,
+        'update',
+    ]);
+
     Route::delete('/authors/{author}', [
         AuthorController::class,
         'destroy',
@@ -368,7 +342,7 @@ Route::middleware([
 
     /*
     |--------------------------------------------------------------------------
-    | Audiobook Management
+    | Audiobooks
     |--------------------------------------------------------------------------
     */
 
@@ -405,7 +379,7 @@ Route::middleware([
 
     /*
     |--------------------------------------------------------------------------
-    | Audiobook Chapter Management
+    | Audiobook Chapters
     |--------------------------------------------------------------------------
     */
 
@@ -442,7 +416,7 @@ Route::middleware([
 
     /*
     |--------------------------------------------------------------------------
-    | Order Management
+    | Orders
     |--------------------------------------------------------------------------
     */
 
@@ -465,18 +439,15 @@ Route::middleware([
 
 /*
 |--------------------------------------------------------------------------
-| Authenticated Customer Routes
+| AUTHENTICATED CUSTOMER API
 |--------------------------------------------------------------------------
-|
-| Every route in this group requires Sanctum authentication.
-|
 */
 
 Route::middleware('auth:sanctum')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | Authenticated User
+    | Current User
     |--------------------------------------------------------------------------
     */
 
@@ -607,6 +578,37 @@ Route::middleware('auth:sanctum')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
+    | My Library
+    |--------------------------------------------------------------------------
+    |
+    | Returns the authenticated user's:
+    |
+    | - books
+    | - audiobooks
+    | - courses
+    |
+    */
+
+    Route::get('/my-library', [
+        MyLibraryController::class,
+        'index',
+    ]);
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Continue Reading
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get('/continue-reading', [
+        ContinueReadingController::class,
+        'index',
+    ]);
+
+
+    /*
+    |--------------------------------------------------------------------------
     | Recently Viewed
     |--------------------------------------------------------------------------
     */
@@ -636,30 +638,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | My Library
-    |--------------------------------------------------------------------------
-    */
-
-    Route::get('/my-library', [
-        MyLibraryController::class,
-        'index',
-    ]);
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Continue Reading
-    |--------------------------------------------------------------------------
-    */
-
-    Route::get('/continue-reading', [
-        ContinueReadingController::class,
-        'index',
-    ]);
-
-
-    /*
-    |--------------------------------------------------------------------------
     | Reader Preferences
     |--------------------------------------------------------------------------
     */
@@ -682,7 +660,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | Secure Book Reading
+    | Book Reader
     |--------------------------------------------------------------------------
     */
 
@@ -694,7 +672,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | Secure Book Download
+    | Book Download
     |--------------------------------------------------------------------------
     */
 
@@ -708,10 +686,6 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     | Audiobook Streaming
     |--------------------------------------------------------------------------
-    |
-    | Private audiobook audio is streamed only to
-    | customers with valid entitlements.
-    |
     */
 
     Route::get('/audiobook-chapters/{chapter}/stream', [
@@ -751,30 +725,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | Podcast Episode Progress
+    | Podcast Continue Listening
     |--------------------------------------------------------------------------
-    |
-    | Podcast content is free, but playback progress belongs
-    | to the authenticated user.
-    |
-    | This allows the application to provide:
-    |
-    | - Continue Listening
-    | - Resume playback
-    | - Playback position
-    | - Completion tracking
-    | - Listening history
-    |
-    */
-
-    /*
-    |--------------------------------------------------------------------------
-    | Continue Listening
-    |--------------------------------------------------------------------------
-    |
-    | Returns podcast episodes that the authenticated
-    | user has started but has not completed.
-    |
     */
 
     Route::get('/podcast-progress/continue-listening', [
@@ -785,7 +737,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | Episode Progress
+    | Podcast Episode Progress
     |--------------------------------------------------------------------------
     */
 
@@ -797,22 +749,6 @@ Route::middleware('auth:sanctum')->group(function () {
         ]
     );
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | Save / Update Episode Progress
-    |--------------------------------------------------------------------------
-    |
-    | Saves:
-    |
-    | - playback position
-    | - duration
-    | - progress percentage
-    | - completion state
-    | - last played time
-    |
-    */
-
     Route::put(
         '/podcasts/{podcast}/episodes/{episode}/progress',
         [
@@ -820,13 +756,6 @@ Route::middleware('auth:sanctum')->group(function () {
             'update',
         ]
     );
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Complete Episode
-    |--------------------------------------------------------------------------
-    */
 
     Route::post(
         '/podcasts/{podcast}/episodes/{episode}/progress/complete',
@@ -856,20 +785,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | Course Learning
-    |--------------------------------------------------------------------------
-    |
-    | Course catalogue and lesson metadata are public.
-    |
-    | Course progress belongs to the authenticated user
-    | and therefore requires Sanctum authentication.
-    |
-    */
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Course Progress Summary
+    | Course Progress
     |--------------------------------------------------------------------------
     */
 
@@ -877,13 +793,6 @@ Route::middleware('auth:sanctum')->group(function () {
         CourseLessonProgressController::class,
         'course',
     ]);
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Individual Lesson Progress
-    |--------------------------------------------------------------------------
-    */
 
     Route::get(
         '/courses/{course}/lessons/{lesson}/progress',
@@ -893,20 +802,6 @@ Route::middleware('auth:sanctum')->group(function () {
         ]
     );
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | Save Lesson Progress
-    |--------------------------------------------------------------------------
-    |
-    | Saves:
-    |
-    | - playback position
-    | - completion state
-    | - last accessed time
-    |
-    */
-
     Route::put(
         '/courses/{course}/lessons/{lesson}/progress',
         [
@@ -914,13 +809,6 @@ Route::middleware('auth:sanctum')->group(function () {
             'update',
         ]
     );
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Complete Lesson
-    |--------------------------------------------------------------------------
-    */
 
     Route::post(
         '/courses/{course}/lessons/{lesson}/complete',
@@ -969,10 +857,13 @@ Route::middleware('auth:sanctum')->group(function () {
         'store',
     ]);
 
-    Route::delete('/books/{uuid}/bookmarks/{bookmark}', [
-        BookmarkController::class,
-        'destroy',
-    ]);
+    Route::delete(
+        '/books/{uuid}/bookmarks/{bookmark}',
+        [
+            BookmarkController::class,
+            'destroy',
+        ]
+    );
 
 
     /*
@@ -992,6 +883,11 @@ Route::middleware('auth:sanctum')->group(function () {
     ]);
 
     Route::put('/books/{uuid}/highlights/{highlight}', [
+        HighlightController::class,
+        'update',
+    ]);
+
+    Route::patch('/books/{uuid}/highlights/{highlight}', [
         HighlightController::class,
         'update',
     ]);
@@ -1019,6 +915,11 @@ Route::middleware('auth:sanctum')->group(function () {
     ]);
 
     Route::put('/books/{uuid}/notes/{readingNote}', [
+        ReadingNoteController::class,
+        'update',
+    ]);
+
+    Route::patch('/books/{uuid}/notes/{readingNote}', [
         ReadingNoteController::class,
         'update',
     ]);

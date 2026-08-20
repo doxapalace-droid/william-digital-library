@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Audiobook;
 use App\Models\Book;
+use App\Models\Course;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -13,13 +14,19 @@ class MyLibraryController extends Controller
     /**
      * Display the authenticated user's digital library.
      *
-     * The existing `data` response remains the book collection
-     * for backward compatibility.
+     * Response structure:
      *
-     * Audiobooks are returned separately under `audiobooks`.
+     * data:
+     *     Owned books.
      *
-     * Only products for which the authenticated customer has
-     * an active entitlement are returned.
+     * audiobooks:
+     *     Owned audiobooks.
+     *
+     * courses:
+     *     Owned courses.
+     *
+     * Only products for which the authenticated customer
+     * has an active entitlement are returned.
      */
     public function index(Request $request): JsonResponse
     {
@@ -38,9 +45,8 @@ class MyLibraryController extends Controller
          * 4. The entitlement has not been revoked.
          * 5. The entitlement has not expired.
          *
-         * The existing response contract is preserved:
-         *
-         * data: [...]
+         * `data` remains the book collection for
+         * backward compatibility.
          */
         $books = Book::query()
             ->select([
@@ -143,19 +149,98 @@ class MyLibraryController extends Controller
 
         /*
          * ---------------------------------------------------------
+         * OWNED COURSES
+         * ---------------------------------------------------------
+         *
+         * A course appears in the library only when:
+         *
+         * 1. The course is active.
+         * 2. It is not scheduled for future publication.
+         * 3. The customer owns an active entitlement.
+         * 4. The entitlement permits course access.
+         * 5. The entitlement has not been revoked.
+         * 6. The entitlement has not expired.
+         *
+         * We intentionally return course catalogue information only.
+         *
+         * Lesson progress remains handled by the dedicated
+         * course lesson progress endpoints.
+         */
+        $courses = Course::query()
+            ->select([
+                'courses.id',
+                'courses.uuid',
+                'courses.title',
+                'courses.slug',
+                'courses.subtitle',
+                'courses.description',
+                'courses.cover_image',
+                'courses.price',
+                'courses.currency',
+                'courses.status',
+                'courses.published_at',
+            ])
+            ->withCount([
+                'lessons' => function ($query) {
+                    $query
+                        ->where('status', 'active')
+                        ->where(function ($lessonQuery) {
+                            $lessonQuery
+                                ->whereNull('published_at')
+                                ->orWhere(
+                                    'published_at',
+                                    '<=',
+                                    now()
+                                );
+                        });
+                },
+            ])
+            ->where('courses.status', 'active')
+            ->where(function ($query) {
+                $query
+                    ->whereNull('courses.published_at')
+                    ->orWhere(
+                        'courses.published_at',
+                        '<=',
+                        now()
+                    );
+            })
+            ->whereHas('entitlements', function ($query) use ($user) {
+                $query
+                    ->where('user_id', $user->id)
+                    ->where('status', 'active')
+                    ->where('can_access', true)
+                    ->whereNull('revoked_at')
+                    ->where(function ($entitlementQuery) {
+                        $entitlementQuery
+                            ->whereNull('expires_at')
+                            ->orWhere(
+                                'expires_at',
+                                '>',
+                                now()
+                            );
+                    });
+            })
+            ->orderByDesc('courses.published_at')
+            ->orderByDesc('courses.id')
+            ->get();
+
+        /*
+         * ---------------------------------------------------------
          * RESPONSE
          * ---------------------------------------------------------
          *
-         * `data` remains the book collection so existing clients
-         * and tests are not broken.
+         * `data` remains the book collection.
          *
-         * Audiobooks are exposed through a new `audiobooks`
-         * collection.
+         * Audiobooks and courses are exposed through their
+         * respective collections.
          */
         return response()->json([
             'data' => $books,
 
             'audiobooks' => $audiobooks,
+
+            'courses' => $courses,
         ]);
     }
 }
