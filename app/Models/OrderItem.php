@@ -21,6 +21,8 @@ class OrderItem extends Model
 
     public const TYPE_COURSE = 'course';
 
+    public const TYPE_BUNDLE = 'bundle';
+
     /**
      * Attributes that may be mass assigned.
      */
@@ -30,6 +32,7 @@ class OrderItem extends Model
         'book_id',
         'audiobook_id',
         'course_id',
+        'bundle_id',
         'unit_price',
         'currency',
         'quantity',
@@ -89,6 +92,14 @@ class OrderItem extends Model
     }
 
     /**
+     * Bundle being purchased.
+     */
+    public function bundle(): BelongsTo
+    {
+        return $this->belongsTo(Bundle::class);
+    }
+
+    /**
      * Determine whether this order item is a book.
      */
     public function isBook(): bool
@@ -110,5 +121,28 @@ class OrderItem extends Model
     public function isCourse(): bool
     {
         return $this->item_type === self::TYPE_COURSE;
+    }
+
+    /**
+     * Determine whether this order item is a bundle.
+     */
+    public function isBundle(): bool
+    {
+        return $this->item_type === self::TYPE_BUNDLE;
+    }
+
+    /**
+     * Get the actual product represented by this
+     * order item.
+     */
+    public function product(): ?Model
+    {
+        return match ($this->item_type) {
+            self::TYPE_BOOK => $this->book,
+            self::TYPE_AUDIOBOOK => $this->audiobook,
+            self::TYPE_COURSE => $this->course,
+            self::TYPE_BUNDLE => $this->bundle,
+            default => null,
+        };
     }
 }

@@ -2,7 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Models\Audiobook;
 use App\Models\Book;
+use App\Models\Bundle;
+use App\Models\BundleItem;
+use App\Models\Course;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\User;
@@ -236,9 +240,9 @@ class OrderControllerTest extends TestCase
     }
 
     /**
-     * Order details include purchased items.
+     * Order details include a purchased book.
      */
-    public function test_order_details_include_items(): void
+    public function test_order_details_include_book_item(): void
     {
         $user = User::factory()->create();
 
@@ -259,15 +263,13 @@ class OrderControllerTest extends TestCase
             'total' => 25.00,
         ]);
 
-        /*
-         * OrderItemFactory does not exist in this project.
-         * Create the order item directly.
-         */
         OrderItem::create([
             'order_id' => $order->id,
-            'item_type' => 'book',
+            'item_type' => OrderItem::TYPE_BOOK,
             'book_id' => $book->id,
             'audiobook_id' => null,
+            'course_id' => null,
+            'bundle_id' => null,
             'unit_price' => 25.00,
             'currency' => 'USD',
             'quantity' => 1,
@@ -283,6 +285,10 @@ class OrderControllerTest extends TestCase
         $response
             ->assertOk()
             ->assertJsonCount(1, 'data.items')
+            ->assertJsonPath(
+                'data.items.0.item_type',
+                'book'
+            )
             ->assertJsonPath(
                 'data.items.0.quantity',
                 1
@@ -310,6 +316,375 @@ class OrderControllerTest extends TestCase
             ->assertJsonPath(
                 'data.items.0.book.slug',
                 'kingdom-dominion'
+            )
+            ->assertJsonPath(
+                'data.items.0.audiobook',
+                null
+            );
+    }
+
+    /**
+     * Order details include an audiobook.
+     */
+    public function test_order_details_include_audiobook_item(): void
+    {
+        $user = User::factory()->create();
+
+        $book = Book::factory()->create();
+
+        $audiobook = Audiobook::factory()->create([
+            'book_id' => $book->id,
+            'description' => 'Kingdom Dominion audiobook',
+            'price' => 15.00,
+            'currency' => 'USD',
+            'status' => 'active',
+            'duration_seconds' => 3600,
+            'published_at' => now(),
+        ]);
+
+        $order = Order::factory()->create([
+            'user_id' => $user->id,
+            'order_number' => 'DP-000201',
+            'currency' => 'USD',
+            'subtotal' => 15.00,
+            'discount' => 0.00,
+            'total' => 15.00,
+        ]);
+
+        OrderItem::create([
+            'order_id' => $order->id,
+            'item_type' => OrderItem::TYPE_AUDIOBOOK,
+            'book_id' => null,
+            'audiobook_id' => $audiobook->id,
+            'course_id' => null,
+            'bundle_id' => null,
+            'unit_price' => 15.00,
+            'currency' => 'USD',
+            'quantity' => 1,
+            'subtotal' => 15.00,
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $response = $this->getJson(
+            "/api/orders/{$order->uuid}"
+        );
+
+        $response
+            ->assertOk()
+            ->assertJsonCount(1, 'data.items')
+            ->assertJsonPath(
+                'data.items.0.item_type',
+                'audiobook'
+            )
+            ->assertJsonPath(
+                'data.items.0.audiobook.id',
+                $audiobook->id
+            )
+            ->assertJsonPath(
+                'data.items.0.audiobook.uuid',
+                $audiobook->uuid
+            )
+            ->assertJsonPath(
+                'data.items.0.audiobook.book_id',
+                $book->id
+            )
+            ->assertJsonPath(
+                'data.items.0.audiobook.price',
+                '15.00'
+            )
+            ->assertJsonPath(
+                'data.items.0.audiobook.currency',
+                'USD'
+            )
+            ->assertJsonPath(
+                'data.items.0.audiobook.duration_seconds',
+                3600
+            )
+            ->assertJsonPath(
+                'data.items.0.audiobook.duration_minutes',
+                60
+            )
+            ->assertJsonPath(
+                'data.items.0.book',
+                null
+            );
+    }
+
+    /**
+     * Order details include a course item.
+     *
+     * This test intentionally establishes the API contract
+     * for course order items.
+     */
+    public function test_order_details_include_course_item(): void
+    {
+        $user = User::factory()->create();
+
+        $course = Course::factory()->create([
+            'title' => 'Kingdom Leadership',
+            'slug' => 'kingdom-leadership',
+            'price' => 30.00,
+            'currency' => 'USD',
+            'status' => 'active',
+            'published_at' => now(),
+        ]);
+
+        $order = Order::factory()->create([
+            'user_id' => $user->id,
+            'order_number' => 'DP-000202',
+            'currency' => 'USD',
+            'subtotal' => 30.00,
+            'discount' => 0.00,
+            'total' => 30.00,
+        ]);
+
+        OrderItem::create([
+            'order_id' => $order->id,
+            'item_type' => OrderItem::TYPE_COURSE,
+            'book_id' => null,
+            'audiobook_id' => null,
+            'course_id' => $course->id,
+            'bundle_id' => null,
+            'unit_price' => 30.00,
+            'currency' => 'USD',
+            'quantity' => 1,
+            'subtotal' => 30.00,
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $response = $this->getJson(
+            "/api/orders/{$order->uuid}"
+        );
+
+        $response
+            ->assertOk()
+            ->assertJsonCount(1, 'data.items')
+            ->assertJsonPath(
+                'data.items.0.item_type',
+                'course'
+            )
+            ->assertJsonPath(
+                'data.items.0.quantity',
+                1
+            )
+            ->assertJsonPath(
+                'data.items.0.unit_price',
+                '30.00'
+            )
+            ->assertJsonPath(
+                'data.items.0.subtotal',
+                '30.00'
+            );
+    }
+
+    /**
+     * Order details include a bundle item.
+     *
+     * This test establishes the customer-facing bundle
+     * order-item contract.
+     */
+    public function test_order_details_include_bundle_item(): void
+    {
+        $user = User::factory()->create();
+
+        $bundle = Bundle::factory()->create([
+            'name' => 'Kingdom Success Collection',
+            'slug' => 'kingdom-success-collection',
+            'description' => 'A collection of kingdom success resources.',
+            'price' => 50.00,
+            'currency' => 'USD',
+            'is_active' => true,
+            'is_published' => true,
+            'published_at' => now(),
+        ]);
+
+        $order = Order::factory()->create([
+            'user_id' => $user->id,
+            'order_number' => 'DP-000203',
+            'currency' => 'USD',
+            'subtotal' => 50.00,
+            'discount' => 0.00,
+            'total' => 50.00,
+        ]);
+
+        OrderItem::create([
+            'order_id' => $order->id,
+            'item_type' => OrderItem::TYPE_BUNDLE,
+            'book_id' => null,
+            'audiobook_id' => null,
+            'course_id' => null,
+            'bundle_id' => $bundle->id,
+            'unit_price' => 50.00,
+            'currency' => 'USD',
+            'quantity' => 1,
+            'subtotal' => 50.00,
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $response = $this->getJson(
+            "/api/orders/{$order->uuid}"
+        );
+
+        $response
+            ->assertOk()
+            ->assertJsonCount(1, 'data.items')
+            ->assertJsonPath(
+                'data.items.0.item_type',
+                'bundle'
+            )
+            ->assertJsonPath(
+                'data.items.0.quantity',
+                1
+            )
+            ->assertJsonPath(
+                'data.items.0.unit_price',
+                '50.00'
+            )
+            ->assertJsonPath(
+                'data.items.0.subtotal',
+                '50.00'
+            );
+    }
+
+    /**
+     * A mixed order can contain a book, audiobook,
+     * course and bundle at the same time.
+     *
+     * This is the important integration contract for
+     * the commercial catalogue.
+     */
+    public function test_order_details_include_mixed_product_types(): void
+    {
+        $user = User::factory()->create();
+
+        $book = Book::factory()->create([
+            'title' => 'Foundations of Dominion',
+        ]);
+
+        $audiobookBook = Book::factory()->create();
+
+        $audiobook = Audiobook::factory()->create([
+            'book_id' => $audiobookBook->id,
+            'price' => 15.00,
+            'currency' => 'USD',
+            'status' => 'active',
+            'duration_seconds' => 1800,
+            'published_at' => now(),
+        ]);
+
+        $course = Course::factory()->create([
+            'title' => 'Kingdom Leadership',
+            'price' => 30.00,
+            'currency' => 'USD',
+            'status' => 'active',
+            'published_at' => now(),
+        ]);
+
+        $bundle = Bundle::factory()->create([
+            'name' => 'Kingdom Success Collection',
+            'price' => 50.00,
+            'currency' => 'USD',
+            'is_active' => true,
+            'is_published' => true,
+            'published_at' => now(),
+        ]);
+
+        $bundleBook = Book::factory()->create();
+
+        BundleItem::create([
+            'bundle_id' => $bundle->id,
+            'item_type' => BundleItem::TYPE_BOOK,
+            'book_id' => $bundleBook->id,
+        ]);
+
+        $order = Order::factory()->create([
+            'user_id' => $user->id,
+            'order_number' => 'DP-000204',
+            'currency' => 'USD',
+            'subtotal' => 115.00,
+            'discount' => 0.00,
+            'total' => 115.00,
+        ]);
+
+        OrderItem::create([
+            'order_id' => $order->id,
+            'item_type' => OrderItem::TYPE_BOOK,
+            'book_id' => $book->id,
+            'audiobook_id' => null,
+            'course_id' => null,
+            'bundle_id' => null,
+            'unit_price' => 20.00,
+            'currency' => 'USD',
+            'quantity' => 1,
+            'subtotal' => 20.00,
+        ]);
+
+        OrderItem::create([
+            'order_id' => $order->id,
+            'item_type' => OrderItem::TYPE_AUDIOBOOK,
+            'book_id' => null,
+            'audiobook_id' => $audiobook->id,
+            'course_id' => null,
+            'bundle_id' => null,
+            'unit_price' => 15.00,
+            'currency' => 'USD',
+            'quantity' => 1,
+            'subtotal' => 15.00,
+        ]);
+
+        OrderItem::create([
+            'order_id' => $order->id,
+            'item_type' => OrderItem::TYPE_COURSE,
+            'book_id' => null,
+            'audiobook_id' => null,
+            'course_id' => $course->id,
+            'bundle_id' => null,
+            'unit_price' => 30.00,
+            'currency' => 'USD',
+            'quantity' => 1,
+            'subtotal' => 30.00,
+        ]);
+
+        OrderItem::create([
+            'order_id' => $order->id,
+            'item_type' => OrderItem::TYPE_BUNDLE,
+            'book_id' => null,
+            'audiobook_id' => null,
+            'course_id' => null,
+            'bundle_id' => $bundle->id,
+            'unit_price' => 50.00,
+            'currency' => 'USD',
+            'quantity' => 1,
+            'subtotal' => 50.00,
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $response = $this->getJson(
+            "/api/orders/{$order->uuid}"
+        );
+
+        $response
+            ->assertOk()
+            ->assertJsonCount(4, 'data.items')
+            ->assertJsonPath(
+                'data.items.0.item_type',
+                'book'
+            )
+            ->assertJsonPath(
+                'data.items.1.item_type',
+                'audiobook'
+            )
+            ->assertJsonPath(
+                'data.items.2.item_type',
+                'course'
+            )
+            ->assertJsonPath(
+                'data.items.3.item_type',
+                'bundle'
             );
     }
 
@@ -365,15 +740,13 @@ class OrderControllerTest extends TestCase
             'order_number' => 'DP-000400',
         ]);
 
-        /*
-         * Create the order item directly because
-         * this project does not have OrderItemFactory.
-         */
         OrderItem::create([
             'order_id' => $order->id,
-            'item_type' => 'book',
+            'item_type' => OrderItem::TYPE_BOOK,
             'book_id' => $book->id,
             'audiobook_id' => null,
+            'course_id' => null,
+            'bundle_id' => null,
             'unit_price' => $book->price,
             'currency' => $book->currency,
             'quantity' => 1,
@@ -384,11 +757,7 @@ class OrderControllerTest extends TestCase
 
         $response = $this->getJson('/api/orders');
 
-        $response
-            ->assertOk()
-            ->assertJsonMissing([
-                'items' => [],
-            ]);
+        $response->assertOk();
 
         $this->assertArrayNotHasKey(
             'items',

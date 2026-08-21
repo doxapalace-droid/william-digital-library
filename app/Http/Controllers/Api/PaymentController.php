@@ -321,8 +321,18 @@ class PaymentController extends Controller
             ->where('user_id', $request->user()->id)
             ->with([
                 'order.items.book',
-                'order.items.audiobook.book',
+                'order.items.audiobook',
                 'order.items.course',
+
+                /*
+                 * Bundle contents must be loaded so that
+                 * successful bundle purchases can grant
+                 * the appropriate entitlements.
+                 */
+                'order.items.bundle.items.book',
+                'order.items.bundle.items.audiobook',
+                'order.items.bundle.items.course',
+                'order.items.bundle.items.video',
             ])
             ->firstOrFail();
 
@@ -477,9 +487,8 @@ class PaymentController extends Controller
          * 1. Mark payment successful.
          * 2. Mark order paid.
          * 3. Complete order.
-         * 4. Grant book entitlement.
-         * 5. Grant audiobook entitlement.
-         * 6. Grant course entitlement.
+         * 4. Grant direct-product entitlements.
+         * 5. Expand bundle entitlements.
          */
         DB::transaction(function () use (
             $payment,
@@ -509,95 +518,71 @@ class PaymentController extends Controller
             ]);
 
             /*
-             * Grant the correct entitlement for each
+             * Grant the correct entitlement for every
              * purchased digital product.
              */
             foreach ($order->items as $item) {
 
                 /*
-                 * BOOK PURCHASE
+                 * DIRECT BOOK PURCHASE
                  */
                 if (
                     $item->isBook()
                     && $item->book_id
                 ) {
-                    BookEntitlement::firstOrCreate(
-                        [
-                            'user_id' =>
-                                $order->user_id,
-
-                            'book_id' =>
-                                $item->book_id,
-                        ],
-                        [
-                            'source' => 'purchase',
-                            'can_read' => true,
-                            'can_download' => true,
-                            'status' => 'active',
-                            'granted_at' => now(),
-                            'expires_at' => null,
-                            'revoked_at' => null,
-                        ]
+                    $this->grantBookEntitlement(
+                        $order->user_id,
+                        $item->book_id
                     );
 
                     continue;
                 }
 
                 /*
-                 * AUDIOBOOK PURCHASE
+                 * DIRECT AUDIOBOOK PURCHASE
                  */
                 if (
                     $item->isAudiobook()
                     && $item->audiobook_id
                 ) {
-                    AudiobookEntitlement::firstOrCreate(
-                        [
-                            'user_id' =>
-                                $order->user_id,
-
-                            'audiobook_id' =>
-                                $item->audiobook_id,
-                        ],
-                        [
-                            'source' => 'purchase',
-                            'can_stream' => true,
-                            'can_download' => true,
-                            'status' => 'active',
-                            'granted_at' => now(),
-                            'expires_at' => null,
-                            'revoked_at' => null,
-                        ]
+                    $this->grantAudiobookEntitlement(
+                        $order->user_id,
+                        $item->audiobook_id
                     );
 
                     continue;
                 }
 
                 /*
-                 * COURSE PURCHASE
-                 *
-                 * A successful course purchase grants
-                 * the customer access to the course.
+                 * DIRECT COURSE PURCHASE
                  */
                 if (
                     $item->isCourse()
                     && $item->course_id
                 ) {
-                    CourseEntitlement::firstOrCreate(
-                        [
-                            'user_id' =>
-                                $order->user_id,
+                    $this->grantCourseEntitlement(
+                        $order->user_id,
+                        $item->course_id
+                    );
 
-                            'course_id' =>
-                                $item->course_id,
-                        ],
-                        [
-                            'source' => 'purchase',
-                            'can_access' => true,
-                            'status' => 'active',
-                            'granted_at' => now(),
-                            'expires_at' => null,
-                            'revoked_at' => null,
-                        ]
+                    continue;
+                }
+
+                /*
+                 * BUNDLE PURCHASE
+                 *
+                 * A bundle is a commercial container.
+                 * Its individual digital products are
+                 * converted into the corresponding
+                 * customer entitlements.
+                 */
+                if (
+                    $item->isBundle()
+                    && $item->bundle
+                ) {
+                    $this->grantBundleEntitlements(
+                        $order->user_id,
+                        $item->bundle
                     );
                 }
             }
@@ -631,6 +616,150 @@ class PaymentController extends Controller
             'message' =>
                 'Payment verified successfully.',
         ]);
+    }
+
+    /**
+     * Grant all applicable entitlements contained
+     * in a purchased bundle.
+     *
+     * Videos are intentionally ignored because
+     * the current application does not have a
+     * VideoEntitlement model/system.
+     */
+    private function grantBundleEntitlements(
+        int $userId,
+        $bundle
+    ): void {
+        foreach ($bundle->items as $bundleItem) {
+
+            /*
+             * Bundle book.
+             */
+            if (
+                $bundleItem->isBook()
+                && $bundleItem->book_id
+            ) {
+                $this->grantBookEntitlement(
+                    $userId,
+                    $bundleItem->book_id
+                );
+
+                continue;
+            }
+
+            /*
+             * Bundle audiobook.
+             */
+            if (
+                $bundleItem->isAudiobook()
+                && $bundleItem->audiobook_id
+            ) {
+                $this->grantAudiobookEntitlement(
+                    $userId,
+                    $bundleItem->audiobook_id
+                );
+
+                continue;
+            }
+
+            /*
+             * Bundle course.
+             */
+            if (
+                $bundleItem->isCourse()
+                && $bundleItem->course_id
+            ) {
+                $this->grantCourseEntitlement(
+                    $userId,
+                    $bundleItem->course_id
+                );
+
+                continue;
+            }
+
+            /*
+             * Bundle videos currently require no
+             * entitlement because videos are currently
+             * publicly accessible once active/published.
+             */
+            if (
+                $bundleItem->isVideo()
+                && $bundleItem->video_id
+            ) {
+                continue;
+            }
+        }
+    }
+
+    /**
+     * Grant a book entitlement.
+     */
+    private function grantBookEntitlement(
+        int $userId,
+        int $bookId
+    ): void {
+        BookEntitlement::firstOrCreate(
+            [
+                'user_id' => $userId,
+                'book_id' => $bookId,
+            ],
+            [
+                'source' => 'purchase',
+                'can_read' => true,
+                'can_download' => true,
+                'status' => 'active',
+                'granted_at' => now(),
+                'expires_at' => null,
+                'revoked_at' => null,
+            ]
+        );
+    }
+
+    /**
+     * Grant an audiobook entitlement.
+     */
+    private function grantAudiobookEntitlement(
+        int $userId,
+        int $audiobookId
+    ): void {
+        AudiobookEntitlement::firstOrCreate(
+            [
+                'user_id' => $userId,
+                'audiobook_id' => $audiobookId,
+            ],
+            [
+                'source' => 'purchase',
+                'can_stream' => true,
+                'can_download' => true,
+                'status' => 'active',
+                'granted_at' => now(),
+                'expires_at' => null,
+                'revoked_at' => null,
+            ]
+        );
+    }
+
+    /**
+     * Grant a course entitlement.
+     */
+    private function grantCourseEntitlement(
+        int $userId,
+        int $courseId
+    ): void {
+        CourseEntitlement::firstOrCreate(
+            [
+                'user_id' => $userId,
+                'course_id' => $courseId,
+            ],
+            [
+                'source' => 'purchase',
+                'can_access' => true,
+                'status' => 'active',
+                'granted_at' => now(),
+                'expires_at' => null,
+                'revoked_at' => null,
+            ]
+        );
     }
 
     /**

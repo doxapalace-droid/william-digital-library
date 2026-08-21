@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Order extends Model
 {
@@ -74,6 +75,29 @@ class Order extends Model
     }
 
     /**
+     * Coupon redemption associated with this order.
+     *
+     * An order can have at most one coupon redemption
+     * because the checkout system allows one coupon
+     * per order.
+     */
+    public function couponUsage(): HasOne
+    {
+        return $this->hasOne(CouponUsage::class);
+    }
+
+    /**
+     * Coupon redemptions associated with this order.
+     *
+     * Kept as a collection relationship for flexibility
+     * and historical queries.
+     */
+    public function couponUsages(): HasMany
+    {
+        return $this->hasMany(CouponUsage::class);
+    }
+
+    /**
      * Determine whether the order has been paid.
      */
     public function isPaid(): bool
@@ -90,13 +114,13 @@ class Order extends Model
     }
 
     /**
-     * Determine whether this order contains
+     * Determine whether the order contains
      * at least one course item.
      */
     public function hasCourse(): bool
     {
         return $this->items()
-            ->where('item_type', 'course')
+            ->where('item_type', OrderItem::TYPE_COURSE)
             ->exists();
     }
 
@@ -106,28 +130,85 @@ class Order extends Model
     public function courseItems(): HasMany
     {
         return $this->hasMany(OrderItem::class)
-            ->where('item_type', 'course');
+            ->where('item_type', OrderItem::TYPE_COURSE);
     }
-
 
     /**
- * Coupon redemption associated with this order.
- */
-    public function couponUsage(): HasOne
+     * Determine whether the order contains
+     * at least one bundle item.
+     */
+    public function hasBundle(): bool
     {
-    return $this->hasOne(CouponUsage::class);
-    
+        return $this->items()
+            ->where('item_type', OrderItem::TYPE_BUNDLE)
+            ->exists();
     }
-
 
     /**
-    * Coupon redemptions associated with this order.
-    */
-    public function couponUsages(): HasMany
+     * Get bundle items contained in this order.
+     */
+    public function bundleItems(): HasMany
     {
-    return $this->hasMany(CouponUsage::class);
+        return $this->hasMany(OrderItem::class)
+            ->where('item_type', OrderItem::TYPE_BUNDLE);
     }
 
+    /**
+     * Determine whether the order contains
+     * at least one book item.
+     */
+    public function hasBook(): bool
+    {
+        return $this->items()
+            ->where('item_type', OrderItem::TYPE_BOOK)
+            ->exists();
+    }
+
+    /**
+     * Get book items contained in this order.
+     */
+    public function bookItems(): HasMany
+    {
+        return $this->hasMany(OrderItem::class)
+            ->where('item_type', OrderItem::TYPE_BOOK);
+    }
+
+    /**
+     * Determine whether the order contains
+     * at least one audiobook item.
+     */
+    public function hasAudiobook(): bool
+    {
+        return $this->items()
+            ->where('item_type', OrderItem::TYPE_AUDIOBOOK)
+            ->exists();
+    }
+
+    /**
+     * Get audiobook items contained in this order.
+     */
+    public function audiobookItems(): HasMany
+    {
+        return $this->hasMany(OrderItem::class)
+            ->where('item_type', OrderItem::TYPE_AUDIOBOOK);
+    }
+
+    /**
+     * Determine whether the order contains
+     * any digital product.
+     */
+    public function hasDigitalProducts(): bool
+    {
+        return $this->items()->exists();
+    }
+
+    /**
+     * Determine whether the order has a coupon discount.
+     */
+    public function hasDiscount(): bool
+    {
+        return (float) $this->discount > 0;
+    }
 
     /**
      * Determine whether the order can still be paid.

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AudiobookEntitlement;
 use App\Models\BookEntitlement;
+use App\Models\Bundle;
 use App\Models\CartItem;
 use App\Models\CourseEntitlement;
 use App\Models\Order;
@@ -32,6 +33,7 @@ class CheckoutController extends Controller
      * - Books
      * - Audiobooks
      * - Courses
+     * - Bundles
      * - Mixed carts
      */
     public function index(Request $request): JsonResponse
@@ -43,7 +45,6 @@ class CheckoutController extends Controller
         if ($cartItems->isEmpty()) {
             return response()->json([
                 'message' => 'Your cart is empty.',
-
                 'data' => [
                     'items' => [],
                     'currency' => null,
@@ -203,7 +204,7 @@ class CheckoutController extends Controller
                  * Convert every cart item into an order item.
                  *
                  * IMPORTANT:
-                 * The item_type, product IDs and captured
+                 * The item type, product IDs and captured
                  * prices are preserved.
                  */
                 foreach ($cartItems as $cartItem) {
@@ -221,6 +222,9 @@ class CheckoutController extends Controller
 
                         'course_id' =>
                             $cartItem->course_id,
+
+                        'bundle_id' =>
+                            $cartItem->bundle_id,
 
                         'unit_price' =>
                             $cartItem->unit_price,
@@ -299,6 +303,8 @@ class CheckoutController extends Controller
                     },
 
                     'items.course:id,uuid,title,slug,subtitle,description,cover_image,price,currency,status,published_at',
+
+                    'items.bundle:id,uuid,name,slug,description,cover_image,price,currency,is_active,is_published,published_at',
                 ]);
 
                 /*
@@ -314,7 +320,19 @@ class CheckoutController extends Controller
                     $order->load('couponUsages');
                 }
 
-                return $order->fresh();
+                return $order->fresh([
+                    'items.book:id,uuid,title,slug,subtitle,author,cover_image,price,currency',
+
+                    'items.audiobook' => function ($query) {
+                        $query->with([
+                            'book:id,uuid,title,slug,subtitle,author,cover_image',
+                        ]);
+                    },
+
+                    'items.course:id,uuid,title,slug,subtitle,description,cover_image,price,currency,status,published_at',
+
+                    'items.bundle:id,uuid,name,slug,description,cover_image,price,currency,is_active,is_published,published_at',
+                ]);
             });
 
         } catch (ValidationException $exception) {
@@ -352,6 +370,8 @@ class CheckoutController extends Controller
                 },
 
                 'course:id,uuid,title,slug,subtitle,description,cover_image,price,currency,status,published_at',
+
+                'bundle:id,uuid,name,slug,description,cover_image,price,currency,is_active,is_published,published_at',
             ])
             ->where('user_id', $userId)
             ->orderBy('created_at')
@@ -365,6 +385,7 @@ class CheckoutController extends Controller
      * - Books
      * - Audiobooks
      * - Courses
+     * - Bundles
      */
     private function validateCartItem(
         CartItem $cartItem,
@@ -416,6 +437,14 @@ class CheckoutController extends Controller
             $this->validateCourseCartItem(
                 $cartItem,
                 $userId
+            );
+
+            return;
+        }
+
+        if ($cartItem->isBundle()) {
+            $this->validateBundleCartItem(
+                $cartItem
             );
 
             return;
@@ -605,6 +634,52 @@ class CheckoutController extends Controller
     }
 
     /**
+     * Validate a bundle cart item.
+     */
+    private function validateBundleCartItem(
+        CartItem $cartItem
+    ): void {
+        $bundle = $cartItem->bundle;
+
+        if (! $bundle) {
+            throw ValidationException::withMessages([
+                'cart' => [
+                    'The bundle in your cart no longer exists.',
+                ],
+            ]);
+        }
+
+        if (! $bundle->isActive()) {
+            throw ValidationException::withMessages([
+                'cart' => [
+                    "The bundle '{$bundle->name}' is no longer available for purchase.",
+                ],
+            ]);
+        }
+
+        if (! $bundle->isPurchasable()) {
+            throw ValidationException::withMessages([
+                'cart' => [
+                    "The bundle '{$bundle->name}' is not currently available for purchase.",
+                ],
+            ]);
+        }
+
+        /*
+         * The bundle price captured in the cart is intentionally
+         * preserved. We do not replace it with the current
+         * catalogue price during checkout.
+         */
+        if ((float) $cartItem->unit_price < 0) {
+            throw ValidationException::withMessages([
+                'cart' => [
+                    "The bundle '{$bundle->name}' has an invalid price.",
+                ],
+            ]);
+        }
+    }
+
+    /**
      * Ensure all cart items use one currency.
      */
     private function ensureSingleCurrency(
@@ -714,6 +789,8 @@ class CheckoutController extends Controller
             'audiobook' => null,
 
             'course' => null,
+
+            'bundle' => null,
         ];
 
         if ($cartItem->isBook() && $cartItem->book) {
@@ -824,6 +901,43 @@ class CheckoutController extends Controller
             ];
         }
 
+        if (
+            $cartItem->isBundle()
+            && $cartItem->bundle
+        ) {
+            $bundle = $cartItem->bundle;
+
+            $data['bundle'] = [
+                'id' => $bundle->id,
+
+                'uuid' => $bundle->uuid,
+
+                'name' => $bundle->name,
+
+                'slug' => $bundle->slug,
+
+                'description' => $bundle->description,
+
+                'cover_image' => $bundle->cover_image,
+
+                'price' => $this->formatMoney(
+                    $bundle->price
+                ),
+
+                'currency' => strtoupper(
+                    $bundle->currency
+                ),
+
+                'is_active' => (bool) $bundle->is_active,
+
+                'is_published' =>
+                    (bool) $bundle->is_published,
+
+                'published_at' =>
+                    $bundle->published_at?->toISOString(),
+            ];
+        }
+
         return $data;
     }
 
@@ -917,6 +1031,8 @@ class CheckoutController extends Controller
             'audiobook' => null,
 
             'course' => null,
+
+            'bundle' => null,
         ];
 
         if ($item->isBook() && $item->book) {
@@ -1003,6 +1119,46 @@ class CheckoutController extends Controller
 
                 'cover_image' =>
                     $course->cover_image,
+            ];
+        }
+
+        if (
+            $item->isBundle()
+            && $item->bundle
+        ) {
+            $bundle = $item->bundle;
+
+            $data['bundle'] = [
+                'id' => $bundle->id,
+
+                'uuid' => $bundle->uuid,
+
+                'name' => $bundle->name,
+
+                'slug' => $bundle->slug,
+
+                'description' =>
+                    $bundle->description,
+
+                'cover_image' =>
+                    $bundle->cover_image,
+
+                'price' => $this->formatMoney(
+                    $bundle->price
+                ),
+
+                'currency' => strtoupper(
+                    $bundle->currency
+                ),
+
+                'is_active' =>
+                    (bool) $bundle->is_active,
+
+                'is_published' =>
+                    (bool) $bundle->is_published,
+
+                'published_at' =>
+                    $bundle->published_at?->toISOString(),
             ];
         }
 

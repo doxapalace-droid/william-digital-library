@@ -14,6 +14,9 @@ class OrderController extends Controller
      *
      * Only orders belonging to the authenticated customer
      * are returned.
+     *
+     * Order items are intentionally not loaded here because
+     * the history endpoint should remain lightweight.
      */
     public function index(Request $request): JsonResponse
     {
@@ -50,11 +53,16 @@ class OrderController extends Controller
     /**
      * Display one order belonging to the authenticated customer.
      *
-     * The order may contain:
+     * Supports:
      *
      * - books
      * - audiobooks
-     * - both books and audiobooks
+     * - courses
+     * - bundles
+     * - mixed orders
+     *
+     * Bundle contents are also returned so the customer can
+     * see which products are included in the purchased bundle.
      */
     public function show(
         Request $request,
@@ -68,7 +76,24 @@ class OrderController extends Controller
                     $query
                         ->with([
                             'book:id,uuid,title,slug,subtitle,author,cover_image',
+
                             'audiobook:id,uuid,book_id,description,cover_image,price,currency,duration_seconds,status,published_at',
+
+                            'audiobook.book:id,uuid,title,slug,cover_image',
+
+                            'course:id,uuid,title,slug,subtitle,description,cover_image,price,currency,status,published_at',
+
+                            'bundle:id,uuid,name,slug,description,cover_image,price,currency,is_active,is_published,published_at',
+
+                            'bundle.items' => function ($query) {
+                                $query->with([
+                                    'book:id,uuid,title,slug,subtitle,author,cover_image',
+                                    'audiobook:id,uuid,book_id,description,cover_image,price,currency,duration_seconds,status,published_at',
+                                    'audiobook.book:id,uuid,title,slug,cover_image',
+                                    'course:id,uuid,title,slug,subtitle,description,cover_image,price,currency,status,published_at',
+                                    'video:id,uuid,title,slug,description,cover_image,price,currency,status,duration_seconds,published_at',
+                                ])->orderBy('id');
+                            },
                         ])
                         ->orderBy('id');
                 },
@@ -98,6 +123,7 @@ class OrderController extends Controller
     ): array {
         $data = [
             'id' => $order->id,
+
             'uuid' => $order->uuid,
 
             'order_number' => $order->order_number,
@@ -144,7 +170,12 @@ class OrderController extends Controller
     /**
      * Format an individual order item.
      *
-     * Supports both books and audiobooks.
+     * Supports:
+     *
+     * - books
+     * - audiobooks
+     * - courses
+     * - bundles
      */
     private function formatOrderItem($item): array
     {
@@ -166,92 +197,295 @@ class OrderController extends Controller
             'subtotal' => $this->formatMoney(
                 $item->subtotal
             ),
+
+            'book' => null,
+
+            'audiobook' => null,
+
+            'course' => null,
+
+            'bundle' => null,
         ];
 
         /*
          * Book order item.
          */
         if ($item->isBook()) {
-            $data['book'] = $item->book
-                ? [
-                    'id' => $item->book->id,
-                    'uuid' => $item->book->uuid,
-                    'title' => $item->book->title,
-                    'slug' => $item->book->slug,
-                    'subtitle' => $item->book->subtitle,
-                    'author' => $item->book->author,
-                    'cover_image' => $item->book->cover_image,
-                ]
-                : null;
-
-            $data['audiobook'] = null;
+            $data['book'] = $this->formatBook(
+                $item->book
+            );
         }
 
         /*
          * Audiobook order item.
          */
         elseif ($item->isAudiobook()) {
-            $data['book'] = null;
-
-            $data['audiobook'] = $item->audiobook
-                ? [
-                    'id' => $item->audiobook->id,
-                    'uuid' => $item->audiobook->uuid,
-
-                    'book_id' => $item->audiobook->book_id,
-
-                    'description' =>
-                        $item->audiobook->description,
-
-                    'cover_image' =>
-                        $item->audiobook->cover_image
-                        ?? $item->audiobook->book?->cover_image,
-
-                    'price' =>
-                        $this->formatMoney(
-                            $item->audiobook->price
-                        ),
-
-                    'currency' =>
-                        $item->audiobook->currency,
-
-                    'duration_seconds' =>
-                        $item->audiobook->duration_seconds,
-
-                    'duration_minutes' =>
-                        $item->audiobook->durationInMinutes(),
-
-                    'status' =>
-                        $item->audiobook->status,
-
-                    'published_at' =>
-                        $item->audiobook->published_at,
-                ]
-                : null;
+            $data['audiobook'] = $this->formatAudiobook(
+                $item->audiobook
+            );
         }
 
         /*
-         * Unknown item type.
-         *
-         * This should normally never happen because
-         * item_type is controlled by checkout validation.
+         * Course order item.
          */
-        else {
-            $data['book'] = null;
-            $data['audiobook'] = null;
+        elseif ($item->isCourse()) {
+            $data['course'] = $this->formatCourse(
+                $item->course
+            );
+        }
+
+        /*
+         * Bundle order item.
+         */
+        elseif ($item->isBundle()) {
+            $data['bundle'] = $this->formatBundle(
+                $item->bundle
+            );
         }
 
         return $data;
     }
 
     /**
+     * Format a book for the customer-facing API.
+     */
+    private function formatBook($book): ?array
+    {
+        if (! $book) {
+            return null;
+        }
+
+        return [
+            'id' => $book->id,
+
+            'uuid' => $book->uuid,
+
+            'title' => $book->title,
+
+            'slug' => $book->slug,
+
+            'subtitle' => $book->subtitle,
+
+            'author' => $book->author,
+
+            'cover_image' => $book->cover_image,
+        ];
+    }
+
+    /**
+     * Format an audiobook for the customer-facing API.
+     */
+    private function formatAudiobook($audiobook): ?array
+    {
+        if (! $audiobook) {
+            return null;
+        }
+
+        return [
+            'id' => $audiobook->id,
+
+            'uuid' => $audiobook->uuid,
+
+            'book_id' => $audiobook->book_id,
+
+            'title' => $audiobook->book?->title,
+
+            'slug' => $audiobook->book?->slug,
+
+            'description' => $audiobook->description,
+
+            'cover_image' =>
+                $audiobook->cover_image
+                ?? $audiobook->book?->cover_image,
+
+            'price' => $this->formatMoney(
+                $audiobook->price
+            ),
+
+            'currency' => $audiobook->currency,
+
+            'duration_seconds' =>
+                (int) $audiobook->duration_seconds,
+
+            'duration_minutes' =>
+                $audiobook->durationInMinutes(),
+
+            'status' => $audiobook->status,
+
+            'published_at' => $audiobook->published_at,
+        ];
+    }
+
+    /**
+     * Format a course for the customer-facing API.
+     */
+    private function formatCourse($course): ?array
+    {
+        if (! $course) {
+            return null;
+        }
+
+        return [
+            'id' => $course->id,
+
+            'uuid' => $course->uuid,
+
+            'title' => $course->title,
+
+            'slug' => $course->slug,
+
+            'subtitle' => $course->subtitle,
+
+            'description' => $course->description,
+
+            'cover_image' => $course->cover_image,
+
+            'price' => $this->formatMoney(
+                $course->price
+            ),
+
+            'currency' => $course->currency,
+
+            'status' => $course->status,
+
+            'published_at' => $course->published_at,
+        ];
+    }
+
+    /**
+     * Format a bundle for the customer-facing API.
+     *
+     * The bundle itself is returned together with its
+     * contained products.
+     */
+    private function formatBundle($bundle): ?array
+    {
+        if (! $bundle) {
+            return null;
+        }
+
+        return [
+            'id' => $bundle->id,
+
+            'uuid' => $bundle->uuid,
+
+            'name' => $bundle->name,
+
+            'slug' => $bundle->slug,
+
+            'description' => $bundle->description,
+
+            'cover_image' => $bundle->cover_image,
+
+            'price' => $this->formatMoney(
+                $bundle->price
+            ),
+
+            'currency' => $bundle->currency,
+
+            'is_active' => (bool) $bundle->is_active,
+
+            'is_published' => (bool) $bundle->is_published,
+
+            'published_at' => $bundle->published_at,
+
+            'items' => $bundle->items
+                ->map(
+                    fn ($item) => $this->formatBundleItem($item)
+                )
+                ->values(),
+        ];
+    }
+
+    /**
+     * Format a product contained inside a bundle.
+     */
+    private function formatBundleItem($item): array
+    {
+        $data = [
+            'id' => $item->id,
+
+            'uuid' => $item->uuid,
+
+            'item_type' => $item->item_type,
+
+            'book' => null,
+
+            'audiobook' => null,
+
+            'course' => null,
+
+            'video' => null,
+        ];
+
+        if ($item->isBook()) {
+            $data['book'] = $this->formatBook(
+                $item->book
+            );
+        }
+
+        elseif ($item->isAudiobook()) {
+            $data['audiobook'] = $this->formatAudiobook(
+                $item->audiobook
+            );
+        }
+
+        elseif ($item->isCourse()) {
+            $data['course'] = $this->formatCourse(
+                $item->course
+            );
+        }
+
+        elseif ($item->isVideo()) {
+            $data['video'] = $this->formatVideo(
+                $item->video
+            );
+        }
+
+        return $data;
+    }
+
+    /**
+     * Format a video contained inside a bundle.
+     *
+     * Videos are currently catalogue data only.
+     */
+    private function formatVideo($video): ?array
+    {
+        if (! $video) {
+            return null;
+        }
+
+        return [
+            'id' => $video->id,
+
+            'uuid' => $video->uuid,
+
+            'title' => $video->title,
+
+            'slug' => $video->slug,
+
+            'description' => $video->description,
+
+            'cover_image' => $video->cover_image,
+
+            'price' => $this->formatMoney(
+                $video->price
+            ),
+
+            'currency' => $video->currency,
+
+            'status' => $video->status,
+
+            'duration_seconds' =>
+                (int) $video->duration_seconds,
+
+            'published_at' => $video->published_at,
+        ];
+    }
+
+    /**
      * Format monetary values consistently.
-     *
-     * Example:
-     *
-     * 25      -> "25.00"
-     * 25.5    -> "25.50"
-     * 25.75   -> "25.75"
      */
     private function formatMoney($value): string
     {

@@ -5,7 +5,6 @@ namespace App\Models;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Coupon extends Model
@@ -22,12 +21,17 @@ class Coupon extends Model
 
     /**
      * Supported product types.
+     *
+     * NULL means the coupon applies to all
+     * supported product types.
      */
     public const PRODUCT_BOOK = 'book';
 
     public const PRODUCT_AUDIOBOOK = 'audiobook';
 
     public const PRODUCT_COURSE = 'course';
+
+    public const PRODUCT_BUNDLE = 'bundle';
 
     /**
      * Attributes that may be mass assigned.
@@ -58,9 +62,12 @@ class Coupon extends Model
             'discount_value' => 'decimal:2',
             'maximum_discount' => 'decimal:2',
             'minimum_order_amount' => 'decimal:2',
+
             'is_active' => 'boolean',
+
             'starts_at' => 'datetime',
             'expires_at' => 'datetime',
+
             'usage_limit' => 'integer',
             'per_user_limit' => 'integer',
             'usage_count' => 'integer',
@@ -68,7 +75,7 @@ class Coupon extends Model
     }
 
     /**
-     * Use UUID for route model binding.
+     * Use UUID for public route model binding.
      */
     public function getRouteKeyName(): string
     {
@@ -97,6 +104,21 @@ class Coupon extends Model
     public function isFixed(): bool
     {
         return $this->discount_type === self::TYPE_FIXED;
+    }
+
+    /**
+     * Determine whether the discount type is supported.
+     */
+    public function hasSupportedDiscountType(): bool
+    {
+        return in_array(
+            $this->discount_type,
+            [
+                self::TYPE_PERCENTAGE,
+                self::TYPE_FIXED,
+            ],
+            true
+        );
     }
 
     /**
@@ -140,15 +162,16 @@ class Coupon extends Model
      * Determine whether the coupon is restricted
      * to a particular product type.
      */
-    public function appliesToProductType(string $productType): bool
-    {
+    public function appliesToProductType(
+        string $productType
+    ): bool {
         return $this->product_type === null
             || $this->product_type === $productType;
     }
 
     /**
-     * Determine whether the coupon applies to
-     * a particular order subtotal.
+     * Determine whether the coupon meets the
+     * minimum order amount.
      */
     public function meetsMinimumOrderAmount(
         float $subtotal
@@ -160,20 +183,40 @@ class Coupon extends Model
     /**
      * Calculate the discount for a given amount.
      */
-    public function calculateDiscount(float $amount): float
-    {
+    public function calculateDiscount(
+        float $amount
+    ): float {
         if ($amount <= 0) {
             return 0.00;
         }
 
+        if (! $this->hasSupportedDiscountType()) {
+            return 0.00;
+        }
+
+        /*
+         * Percentage discount.
+         */
         if ($this->isPercentage()) {
             $discount = $amount
                 * ((float) $this->discount_value / 100);
-        } elseif ($this->isFixed()) {
-            $discount = (float) $this->discount_value;
-        } else {
-            return 0.00;
         }
+
+        /*
+         * Fixed amount discount.
+         */
+        else {
+            $discount = (float) $this->discount_value;
+        }
+
+        /*
+         * Prevent negative discount values from
+         * producing unexpected results.
+         */
+        $discount = max(
+            $discount,
+            0
+        );
 
         /*
          * A percentage coupon may have a maximum
@@ -190,16 +233,124 @@ class Coupon extends Model
          * A discount can never exceed the amount
          * being discounted.
          */
-        $discount = min($discount, $amount);
+        $discount = min(
+            $discount,
+            $amount
+        );
 
-        return round($discount, 2);
+        return round(
+            $discount,
+            2
+        );
     }
 
     /**
      * Normalize a coupon code.
+     *
+     * Coupon codes are case-insensitive and stored
+     * consistently in uppercase.
      */
-    public static function normalizeCode(string $code): string
+    public static function normalizeCode(
+        string $code
+    ): string {
+        return strtoupper(
+            trim($code)
+        );
+    }
+
+    /**
+     * Determine whether a product type is supported
+     * by the coupon system.
+     *
+     * NULL means no product restriction.
+     */
+    public static function isSupportedProductType(
+        ?string $productType
+    ): bool {
+        if ($productType === null) {
+            return true;
+        }
+
+        return in_array(
+            $productType,
+            [
+                self::PRODUCT_BOOK,
+                self::PRODUCT_AUDIOBOOK,
+                self::PRODUCT_COURSE,
+                self::PRODUCT_BUNDLE,
+            ],
+            true
+        );
+    }
+
+    /**
+     * Determine whether this coupon has a
+     * product restriction.
+     */
+    public function hasProductRestriction(): bool
     {
-        return strtoupper(trim($code));
+        return $this->product_type !== null;
+    }
+
+    /**
+     * Determine whether this coupon applies
+     * to all supported product types.
+     */
+    public function isUnrestricted(): bool
+    {
+        return $this->product_type === null;
+    }
+
+    /**
+     * Determine whether this coupon applies
+     * specifically to books.
+     */
+    public function appliesToBooks(): bool
+    {
+        return $this->product_type === self::PRODUCT_BOOK;
+    }
+
+    /**
+     * Determine whether this coupon applies
+     * specifically to audiobooks.
+     */
+    public function appliesToAudiobooks(): bool
+    {
+        return $this->product_type === self::PRODUCT_AUDIOBOOK;
+    }
+
+    /**
+     * Determine whether this coupon applies
+     * specifically to courses.
+     */
+    public function appliesToCourses(): bool
+    {
+        return $this->product_type === self::PRODUCT_COURSE;
+    }
+
+    /**
+     * Determine whether this coupon applies
+     * specifically to bundles.
+     */
+    public function appliesToBundles(): bool
+    {
+        return $this->product_type === self::PRODUCT_BUNDLE;
+    }
+
+    /**
+     * Determine whether the coupon has a trial
+     * or promotional restriction.
+     *
+     * Kept as a convenience method for future
+     * coupon-management functionality.
+     */
+    public function isValidForAmount(
+        float $subtotal
+    ): bool {
+        return $this->isCurrentlyValid()
+            && $this->meetsMinimumOrderAmount(
+                $subtotal
+            )
+            && ! $this->hasReachedUsageLimit();
     }
 }
