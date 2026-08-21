@@ -22,6 +22,8 @@ class CartItem extends Model
 
     public const TYPE_COURSE = 'course';
 
+    public const TYPE_BUNDLE = 'bundle';
+
     /**
      * Attributes that may be mass assigned.
      */
@@ -31,6 +33,7 @@ class CartItem extends Model
         'book_id',
         'audiobook_id',
         'course_id',
+        'bundle_id',
         'unit_price',
         'currency',
         'quantity',
@@ -50,21 +53,14 @@ class CartItem extends Model
     }
 
     /**
-     * Model booting.
-     *
-     * Automatically determine the item type when
-     * application code creates a CartItem without
-     * explicitly providing item_type.
-     *
-     * Controllers should still explicitly provide
-     * item_type whenever possible.
+     * Automatically determine the cart item type
+     * when it has not been explicitly supplied.
      */
     protected static function booted(): void
     {
         static::creating(function (CartItem $cartItem): void {
             /*
-             * If the caller supplied a valid item type,
-             * preserve it.
+             * Preserve a valid explicitly supplied type.
              */
             if (
                 in_array(
@@ -73,6 +69,7 @@ class CartItem extends Model
                         self::TYPE_BOOK,
                         self::TYPE_AUDIOBOOK,
                         self::TYPE_COURSE,
+                        self::TYPE_BUNDLE,
                     ],
                     true
                 )
@@ -82,45 +79,29 @@ class CartItem extends Model
 
             /*
              * Determine the type from the associated
-             * product when item_type was omitted.
+             * product.
              */
-            if (
-                $cartItem->book_id !== null
-                && $cartItem->audiobook_id === null
-                && $cartItem->course_id === null
-            ) {
-                $cartItem->item_type = self::TYPE_BOOK;
+            $productIds = [
+                self::TYPE_BOOK => $cartItem->book_id,
+                self::TYPE_AUDIOBOOK => $cartItem->audiobook_id,
+                self::TYPE_COURSE => $cartItem->course_id,
+                self::TYPE_BUNDLE => $cartItem->bundle_id,
+            ];
 
-                return;
+            $provided = collect($productIds)
+                ->filter(
+                    fn ($value) => $value !== null
+                );
+
+            if ($provided->count() !== 1) {
+                throw new InvalidArgumentException(
+                    'A cart item must contain exactly one of book_id, audiobook_id, course_id, or bundle_id.'
+                );
             }
 
-            if (
-                $cartItem->audiobook_id !== null
-                && $cartItem->book_id === null
-                && $cartItem->course_id === null
-            ) {
-                $cartItem->item_type = self::TYPE_AUDIOBOOK;
-
-                return;
-            }
-
-            if (
-                $cartItem->course_id !== null
-                && $cartItem->book_id === null
-                && $cartItem->audiobook_id === null
-            ) {
-                $cartItem->item_type = self::TYPE_COURSE;
-
-                return;
-            }
-
-            /*
-             * A cart item must represent exactly one
-             * digital product.
-             */
-            throw new InvalidArgumentException(
-                'A cart item must contain exactly one of book_id, audiobook_id, or course_id.'
-            );
+            $cartItem->item_type = $provided
+                ->keys()
+                ->first();
         });
     }
 
@@ -157,7 +138,15 @@ class CartItem extends Model
     }
 
     /**
-     * Calculate the subtotal from the current
+     * Bundle contained in the cart.
+     */
+    public function bundle(): BelongsTo
+    {
+        return $this->belongsTo(Bundle::class);
+    }
+
+    /**
+     * Calculate subtotal from the current
      * unit price and quantity.
      */
     public function calculateSubtotal(): float
@@ -190,5 +179,13 @@ class CartItem extends Model
     public function isCourse(): bool
     {
         return $this->item_type === self::TYPE_COURSE;
+    }
+
+    /**
+     * Determine whether this cart item is a bundle.
+     */
+    public function isBundle(): bool
+    {
+        return $this->item_type === self::TYPE_BUNDLE;
     }
 }

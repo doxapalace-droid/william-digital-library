@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Audiobook;
 use App\Models\Book;
+use App\Models\Bundle;
 use App\Models\CartItem;
 use App\Models\Course;
 use Illuminate\Http\JsonResponse;
@@ -16,11 +17,12 @@ class CartController extends Controller
     /**
      * Display the authenticated user's cart.
      *
-     * The cart may contain:
+     * Supported products:
      *
      * - books
      * - audiobooks
      * - courses
+     * - bundles
      */
     public function index(Request $request): JsonResponse
     {
@@ -35,17 +37,17 @@ class CartController extends Controller
                 'audiobook.book:id,uuid,title,slug,subtitle,author,cover_image',
 
                 'course:id,uuid,title,slug,subtitle,description,cover_image,price,currency,status,published_at',
+
+                'bundle:id,uuid,name,slug,description,cover_image,price,currency,is_active,is_published,published_at',
             ])
             ->where('user_id', $user->id)
             ->orderBy('created_at')
             ->get();
 
         /*
-         * Calculate the cart subtotal from the captured
-         * cart-item prices.
-         *
-         * Do not calculate this from current product prices.
-         * The cart contains price snapshots.
+         * Cart prices were captured when each item
+         * was added. Do not recalculate them from
+         * the current catalogue prices.
          */
         $subtotal = $items->sum(
             function (CartItem $item): float {
@@ -68,8 +70,8 @@ class CartController extends Controller
     }
 
     /**
-     * Add a book, audiobook, or course to the
-     * authenticated user's cart.
+     * Add a digital product to the authenticated
+     * user's cart.
      *
      * Supported request fields:
      *
@@ -77,12 +79,7 @@ class CartController extends Controller
      * audiobook_uuid
      * course_uuid
      * course_id
-     *
-     * Note:
-     *
-     * course_id is accepted for backwards compatibility
-     * with the current test suite. It contains the course UUID,
-     * not the internal database ID.
+     * bundle_uuid
      */
     public function store(Request $request): JsonResponse
     {
@@ -107,23 +104,25 @@ class CartController extends Controller
                 ],
 
                 /*
-                 * Kept because the current CourseCartTest
-                 * sends the course UUID using course_id.
+                 * Backwards-compatible course field.
+                 *
+                 * The existing frontend/tests may use
+                 * course_id to carry the course UUID.
                  */
                 'course_id' => [
                     'nullable',
                     'uuid',
                 ],
 
-                /*
-                 * item_type is accepted but the controller
-                 * determines the actual product type from
-                 * the supplied product UUID.
-                 */
+                'bundle_uuid' => [
+                    'nullable',
+                    'uuid',
+                ],
+
                 'item_type' => [
                     'nullable',
                     'string',
-                    'in:book,audiobook,course',
+                    'in:book,audiobook,course,bundle',
                 ],
             ]
         );
@@ -144,17 +143,18 @@ class CartController extends Controller
         /*
          * Prefer course_uuid.
          *
-         * Fall back to course_id because the current
-         * course cart tests use course_id to carry
-         * the course UUID.
+         * Fall back to course_id for backwards
+         * compatibility.
          */
         $courseUuid = $request->input('course_uuid')
             ?? $request->input('course_id');
 
+        $bundleUuid = $request->input(
+            'bundle_uuid'
+        );
+
         /*
-         * If both course_uuid and course_id are supplied,
-         * reject the request because they represent the
-         * same product.
+         * Do not allow both course identifiers.
          */
         if (
             $request->filled('course_uuid')
@@ -177,17 +177,17 @@ class CartController extends Controller
         }
 
         /*
-         * Count the number of products supplied.
-         *
-         * Exactly one product must be added at a time.
+         * Exactly one product must be supplied.
          */
         $providedProducts = collect([
             $bookUuid,
             $audiobookUuid,
             $courseUuid,
+            $bundleUuid,
         ])
             ->filter(
-                fn ($value) => $value !== null
+                fn ($value) =>
+                    $value !== null
                     && $value !== ''
             )
             ->count();
@@ -199,22 +199,27 @@ class CartController extends Controller
 
                 'errors' => [
                     'book_uuid' => [
-                        'Provide exactly one of book_uuid, audiobook_uuid, or course_uuid.',
+                        'Provide exactly one of book_uuid, audiobook_uuid, course_uuid, or bundle_uuid.',
                     ],
 
                     'audiobook_uuid' => [
-                        'Provide exactly one of book_uuid, audiobook_uuid, or course_uuid.',
+                        'Provide exactly one of book_uuid, audiobook_uuid, course_uuid, or bundle_uuid.',
                     ],
 
                     'course_uuid' => [
-                        'Provide exactly one of book_uuid, audiobook_uuid, or course_uuid.',
+                        'Provide exactly one of book_uuid, audiobook_uuid, course_uuid, or bundle_uuid.',
+                    ],
+
+                    'bundle_uuid' => [
+                        'Provide exactly one of book_uuid, audiobook_uuid, course_uuid, or bundle_uuid.',
                     ],
                 ],
             ], 422);
         }
 
         /*
-         * Add a standard digital book.
+         * Route the request to the appropriate
+         * product handler.
          */
         if ($bookUuid !== null) {
             return $this->addBookToCart(
@@ -223,9 +228,6 @@ class CartController extends Controller
             );
         }
 
-        /*
-         * Add an audiobook.
-         */
         if ($audiobookUuid !== null) {
             return $this->addAudiobookToCart(
                 $user->id,
@@ -233,17 +235,22 @@ class CartController extends Controller
             );
         }
 
-        /*
-         * Add a course.
-         */
-        return $this->addCourseToCart(
+        if ($courseUuid !== null) {
+            return $this->addCourseToCart(
+                $user->id,
+                $courseUuid
+            );
+        }
+
+        return $this->addBundleToCart(
             $user->id,
-            $courseUuid
+            $bundleUuid
         );
     }
 
     /**
-     * Remove an item from the authenticated user's cart.
+     * Remove an item from the authenticated
+     * user's cart.
      */
     public function destroy(
         Request $request,
@@ -251,10 +258,6 @@ class CartController extends Controller
     ): JsonResponse {
         $user = $request->user();
 
-        /*
-         * Only allow the authenticated user to remove
-         * their own cart item.
-         */
         $cartItem = CartItem::query()
             ->where('uuid', $uuid)
             ->where('user_id', $user->id)
@@ -263,20 +266,18 @@ class CartController extends Controller
         $cartItem->delete();
 
         return response()->json([
-            'message' => 'Cart item removed successfully.',
+            'message' =>
+                'Cart item removed successfully.',
         ]);
     }
 
     /**
-     * Add a book to the customer's cart.
+     * Add a book to the cart.
      */
     private function addBookToCart(
         int $userId,
         string $bookUuid
     ): JsonResponse {
-        /*
-         * Only published books can be purchased.
-         */
         $book = Book::query()
             ->where('uuid', $bookUuid)
             ->where('is_published', true)
@@ -296,9 +297,8 @@ class CartController extends Controller
         }
 
         /*
-         * A customer who already owns an active,
-         * readable entitlement cannot purchase
-         * the same book again.
+         * Prevent purchasing a book that the customer
+         * already owns.
          */
         $alreadyOwnsBook = $book->entitlements()
             ->where('user_id', $userId)
@@ -318,7 +318,8 @@ class CartController extends Controller
 
         if ($alreadyOwnsBook) {
             return response()->json([
-                'message' => 'You already own this book.',
+                'message' =>
+                    'You already own this book.',
 
                 'errors' => [
                     'book_uuid' => [
@@ -329,7 +330,7 @@ class CartController extends Controller
         }
 
         /*
-         * A book can only appear once in the customer's cart.
+         * Prevent duplicate cart entries.
          */
         $existingCartItem = CartItem::query()
             ->where('user_id', $userId)
@@ -337,7 +338,10 @@ class CartController extends Controller
                 'item_type',
                 CartItem::TYPE_BOOK
             )
-            ->where('book_id', $book->id)
+            ->where(
+                'book_id',
+                $book->id
+            )
             ->exists();
 
         if ($existingCartItem) {
@@ -353,12 +357,6 @@ class CartController extends Controller
             ], 422);
         }
 
-        /*
-         * Capture the current price.
-         *
-         * The cart must preserve this price even if
-         * the catalogue price changes later.
-         */
         $unitPrice = round(
             (float) $book->price,
             2
@@ -367,48 +365,47 @@ class CartController extends Controller
         $cartItem = CartItem::create([
             'user_id' => $userId,
 
-            'item_type' => CartItem::TYPE_BOOK,
+            'item_type' =>
+                CartItem::TYPE_BOOK,
 
-            'book_id' => $book->id,
+            'book_id' =>
+                $book->id,
 
             'audiobook_id' => null,
 
             'course_id' => null,
 
-            'unit_price' => $unitPrice,
+            'bundle_id' => null,
 
-            'currency' => $book->currency,
+            'unit_price' =>
+                $unitPrice,
+
+            'currency' =>
+                strtoupper($book->currency),
 
             'quantity' => 1,
 
-            'subtotal' => $unitPrice,
+            'subtotal' =>
+                $unitPrice,
         ]);
 
-        /*
-         * Load the relationship for the response.
-         */
         $cartItem->load([
             'book:id,uuid,title,slug,subtitle,author,cover_image,price,currency',
         ]);
 
         return response()->json([
-            'data' => $this->formatCartItem(
-                $cartItem
-            ),
+            'data' =>
+                $this->formatCartItem($cartItem),
         ], 201);
     }
 
     /**
-     * Add an audiobook to the customer's cart.
+     * Add an audiobook to the cart.
      */
     private function addAudiobookToCart(
         int $userId,
         string $audiobookUuid
     ): JsonResponse {
-        /*
-         * Only active and currently published
-         * audiobooks can be purchased.
-         */
         $audiobook = Audiobook::query()
             ->with([
                 'book:id,uuid,title,slug,subtitle,author,cover_image',
@@ -433,24 +430,23 @@ class CartController extends Controller
         }
 
         /*
-         * A customer who already has an active
-         * audiobook entitlement cannot purchase
-         * the same audiobook again.
+         * Prevent repurchasing an audiobook.
          */
-        $alreadyOwnsAudiobook = $audiobook->entitlements()
-            ->where('user_id', $userId)
-            ->where('status', 'active')
-            ->whereNull('revoked_at')
-            ->where(function ($query) {
-                $query
-                    ->whereNull('expires_at')
-                    ->orWhere(
-                        'expires_at',
-                        '>',
-                        now()
-                    );
-            })
-            ->exists();
+        $alreadyOwnsAudiobook =
+            $audiobook->entitlements()
+                ->where('user_id', $userId)
+                ->where('status', 'active')
+                ->whereNull('revoked_at')
+                ->where(function ($query) {
+                    $query
+                        ->whereNull('expires_at')
+                        ->orWhere(
+                            'expires_at',
+                            '>',
+                            now()
+                        );
+                })
+                ->exists();
 
         if ($alreadyOwnsAudiobook) {
             return response()->json([
@@ -466,8 +462,7 @@ class CartController extends Controller
         }
 
         /*
-         * An audiobook can only appear once
-         * in the customer's cart.
+         * Prevent duplicate audiobook entries.
          */
         $existingCartItem = CartItem::query()
             ->where('user_id', $userId)
@@ -494,10 +489,6 @@ class CartController extends Controller
             ], 422);
         }
 
-        /*
-         * Capture the audiobook price at the moment
-         * it is added to the cart.
-         */
         $unitPrice = round(
             (float) $audiobook->price,
             2
@@ -511,22 +502,25 @@ class CartController extends Controller
 
             'book_id' => null,
 
-            'audiobook_id' => $audiobook->id,
+            'audiobook_id' =>
+                $audiobook->id,
 
             'course_id' => null,
 
-            'unit_price' => $unitPrice,
+            'bundle_id' => null,
 
-            'currency' => $audiobook->currency,
+            'unit_price' =>
+                $unitPrice,
+
+            'currency' =>
+                strtoupper($audiobook->currency),
 
             'quantity' => 1,
 
-            'subtotal' => $unitPrice,
+            'subtotal' =>
+                $unitPrice,
         ]);
 
-        /*
-         * Load the audiobook and its parent book.
-         */
         $cartItem->load([
             'audiobook:id,uuid,book_id,description,cover_image,price,currency,status,duration_seconds,published_at',
 
@@ -534,29 +528,18 @@ class CartController extends Controller
         ]);
 
         return response()->json([
-            'data' => $this->formatCartItem(
-                $cartItem
-            ),
+            'data' =>
+                $this->formatCartItem($cartItem),
         ], 201);
     }
 
     /**
-     * Add a course to the customer's cart.
+     * Add a course to the cart.
      */
     private function addCourseToCart(
         int $userId,
         string $courseUuid
     ): JsonResponse {
-        /*
-         * Only active and currently published courses
-         * can be purchased.
-         *
-         * Course::isPurchasable() already checks:
-         *
-         * 1. status === active
-         * 2. published_at is not in the future
-         * 3. price is valid
-         */
         $course = Course::query()
             ->where('uuid', $courseUuid)
             ->first();
@@ -578,31 +561,24 @@ class CartController extends Controller
         }
 
         /*
-         * A customer who already has an active course
-         * entitlement cannot purchase the same course again.
-         *
-         * An entitlement does NOT block a new purchase when:
-         *
-         * - it has expired
-         * - it has been revoked
-         * - it is inactive
-         * - can_access is false
+         * Prevent repurchasing a course.
          */
-        $alreadyOwnsCourse = $course->entitlements()
-            ->where('user_id', $userId)
-            ->where('status', 'active')
-            ->where('can_access', true)
-            ->whereNull('revoked_at')
-            ->where(function ($query) {
-                $query
-                    ->whereNull('expires_at')
-                    ->orWhere(
-                        'expires_at',
-                        '>',
-                        now()
-                    );
-            })
-            ->exists();
+        $alreadyOwnsCourse =
+            $course->entitlements()
+                ->where('user_id', $userId)
+                ->where('status', 'active')
+                ->where('can_access', true)
+                ->whereNull('revoked_at')
+                ->where(function ($query) {
+                    $query
+                        ->whereNull('expires_at')
+                        ->orWhere(
+                            'expires_at',
+                            '>',
+                            now()
+                        );
+                })
+                ->exists();
 
         if ($alreadyOwnsCourse) {
             return response()->json([
@@ -618,8 +594,7 @@ class CartController extends Controller
         }
 
         /*
-         * A course can only appear once in
-         * the customer's cart.
+         * Prevent duplicate course entries.
          */
         $existingCartItem = CartItem::query()
             ->where('user_id', $userId)
@@ -646,13 +621,6 @@ class CartController extends Controller
             ], 422);
         }
 
-        /*
-         * Capture the current course price.
-         *
-         * The cart stores a price snapshot.
-         * Later changes to the catalogue price
-         * will not alter this cart item.
-         */
         $unitPrice = round(
             (float) $course->price,
             2
@@ -668,87 +636,221 @@ class CartController extends Controller
 
             'audiobook_id' => null,
 
-            'course_id' => $course->id,
+            'course_id' =>
+                $course->id,
 
-            'unit_price' => $unitPrice,
+            'bundle_id' => null,
 
-            'currency' => $course->currency,
+            'unit_price' =>
+                $unitPrice,
+
+            'currency' =>
+                strtoupper($course->currency),
 
             'quantity' => 1,
 
-            'subtotal' => $unitPrice,
+            'subtotal' =>
+                $unitPrice,
         ]);
 
-        /*
-         * Load the course relationship for the response.
-         */
         $cartItem->load([
             'course:id,uuid,title,slug,subtitle,description,cover_image,price,currency,status,published_at',
         ]);
 
         return response()->json([
-            'data' => $this->formatCartItem(
-                $cartItem
-            ),
+            'data' =>
+                $this->formatCartItem($cartItem),
         ], 201);
     }
 
     /**
-     * Format a cart item for the customer-facing API.
+     * Add a bundle to the cart.
+     */
+    private function addBundleToCart(
+        int $userId,
+        string $bundleUuid
+    ): JsonResponse {
+        /*
+         * Only purchasable bundles may enter
+         * the customer's cart.
+         */
+        $bundle = Bundle::query()
+            ->where('uuid', $bundleUuid)
+            ->first();
+
+        if (
+            ! $bundle
+            || ! $bundle->isPurchasable()
+        ) {
+            return response()->json([
+                'message' =>
+                    'The selected bundle is not available for purchase.',
+
+                'errors' => [
+                    'bundle_uuid' => [
+                        'The selected bundle is not available for purchase.',
+                    ],
+                ],
+            ], 422);
+        }
+
+        /*
+         * Prevent duplicate bundle entries.
+         */
+        $existingCartItem = CartItem::query()
+            ->where('user_id', $userId)
+            ->where(
+                'item_type',
+                CartItem::TYPE_BUNDLE
+            )
+            ->where(
+                'bundle_id',
+                $bundle->id
+            )
+            ->exists();
+
+        if ($existingCartItem) {
+            return response()->json([
+                'message' =>
+                    'This bundle is already in your cart.',
+
+                'errors' => [
+                    'bundle_uuid' => [
+                        'This bundle is already in your cart.',
+                    ],
+                ],
+            ], 422);
+        }
+
+        /*
+         * Capture the bundle price when it enters
+         * the cart.
+         */
+        $unitPrice = round(
+            (float) $bundle->price,
+            2
+        );
+
+        $cartItem = CartItem::create([
+            'user_id' => $userId,
+
+            'item_type' =>
+                CartItem::TYPE_BUNDLE,
+
+            'book_id' => null,
+
+            'audiobook_id' => null,
+
+            'course_id' => null,
+
+            'bundle_id' =>
+                $bundle->id,
+
+            'unit_price' =>
+                $unitPrice,
+
+            'currency' =>
+                strtoupper($bundle->currency),
+
+            'quantity' => 1,
+
+            'subtotal' =>
+                $unitPrice,
+        ]);
+
+        $cartItem->load([
+            'bundle:id,uuid,name,slug,description,cover_image,price,currency,is_active,is_published,published_at',
+        ]);
+
+        return response()->json([
+            'data' =>
+                $this->formatCartItem($cartItem),
+        ], 201);
+    }
+
+    /**
+     * Format a cart item for the API.
      *
-     * Supports:
+     * The response intentionally includes both:
      *
-     * - books
-     * - audiobooks
-     * - courses
+     * - the foreign-key IDs
+     * - the expanded product object
+     *
+     * This makes the API convenient for both simple
+     * clients and richer frontend interfaces.
      */
     private function formatCartItem(
         CartItem $cartItem
     ): array {
         $data = [
-            'id' => $cartItem->id,
+            'id' =>
+                $cartItem->id,
 
-            'uuid' => $cartItem->uuid,
+            'uuid' =>
+                $cartItem->uuid,
+
+            'type' =>
+                $cartItem->item_type,
+
+            'item_type' =>
+                $cartItem->item_type,
 
             /*
-             * "type" is retained for compatibility
-             * with the existing cart API.
+             * Product foreign keys.
              */
-            'type' => $cartItem->item_type,
+            'book_id' =>
+                $cartItem->book_id,
+
+            'audiobook_id' =>
+                $cartItem->audiobook_id,
+
+            'course_id' =>
+                $cartItem->course_id,
+
+            'bundle_id' =>
+                $cartItem->bundle_id,
+
+            'quantity' =>
+                (int) $cartItem->quantity,
 
             /*
-             * "item_type" is also returned so that
-             * clients/tests can use the canonical model field.
+             * Price captured in the cart.
              */
-            'item_type' => $cartItem->item_type,
+            'unit_price' =>
+                number_format(
+                    (float) $cartItem->unit_price,
+                    2,
+                    '.',
+                    ''
+                ),
 
-            'quantity' => (int) $cartItem->quantity,
+            'currency' =>
+                strtoupper(
+                    $cartItem->currency
+                ),
 
-            'unit_price' => number_format(
-                (float) $cartItem->unit_price,
-                2,
-                '.',
-                ''
-            ),
+            'subtotal' =>
+                number_format(
+                    (float) $cartItem->subtotal,
+                    2,
+                    '.',
+                    ''
+                ),
 
-            'currency' => $cartItem->currency,
-
-            'subtotal' => number_format(
-                (float) $cartItem->subtotal,
-                2,
-                '.',
-                ''
-            ),
-
+            /*
+             * Expanded product data.
+             */
             'book' => null,
 
             'audiobook' => null,
 
             'course' => null,
+
+            'bundle' => null,
         ];
 
         /*
-         * Standard digital book.
+         * Book.
          */
         if (
             $cartItem->item_type
@@ -758,57 +860,76 @@ class CartController extends Controller
             $book = $cartItem->book;
 
             $data['book'] = [
-                'id' => $book->id,
+                'id' =>
+                    $book->id,
 
-                'uuid' => $book->uuid,
+                'uuid' =>
+                    $book->uuid,
 
-                'title' => $book->title,
+                'title' =>
+                    $book->title,
 
-                'slug' => $book->slug,
+                'slug' =>
+                    $book->slug,
 
-                'subtitle' => $book->subtitle,
+                'subtitle' =>
+                    $book->subtitle,
 
-                'author' => $book->author,
+                'author' =>
+                    $book->author,
 
-                'cover_image' => $book->cover_image,
+                'cover_image' =>
+                    $book->cover_image,
 
-                'price' => number_format(
-                    (float) $book->price,
-                    2,
-                    '.',
-                    ''
-                ),
+                'price' =>
+                    number_format(
+                        (float) $book->price,
+                        2,
+                        '.',
+                        ''
+                    ),
 
-                'currency' => $book->currency,
+                'currency' =>
+                    strtoupper(
+                        $book->currency
+                    ),
             ];
         }
 
         /*
          * Audiobook.
          *
-         * Deliberately do NOT expose audio_file.
+         * audio_file is deliberately excluded.
          */
         if (
             $cartItem->item_type
                 === CartItem::TYPE_AUDIOBOOK
             && $cartItem->audiobook
         ) {
-            $audiobook = $cartItem->audiobook;
+            $audiobook =
+                $cartItem->audiobook;
 
-            $book = $audiobook->book;
+            $book =
+                $audiobook->book;
 
             $data['audiobook'] = [
-                'id' => $audiobook->id,
+                'id' =>
+                    $audiobook->id,
 
-                'uuid' => $audiobook->uuid,
+                'uuid' =>
+                    $audiobook->uuid,
 
-                'title' => $book?->title,
+                'title' =>
+                    $book?->title,
 
-                'slug' => $book?->slug,
+                'slug' =>
+                    $book?->slug,
 
-                'subtitle' => $book?->subtitle,
+                'subtitle' =>
+                    $book?->subtitle,
 
-                'author' => $book?->author,
+                'author' =>
+                    $book?->author,
 
                 'description' =>
                     $audiobook->description,
@@ -817,15 +938,18 @@ class CartController extends Controller
                     $audiobook->cover_image
                     ?? $book?->cover_image,
 
-                'price' => number_format(
-                    (float) $audiobook->price,
-                    2,
-                    '.',
-                    ''
-                ),
+                'price' =>
+                    number_format(
+                        (float) $audiobook->price,
+                        2,
+                        '.',
+                        ''
+                    ),
 
                 'currency' =>
-                    $audiobook->currency,
+                    strtoupper(
+                        $audiobook->currency
+                    ),
 
                 'duration_seconds' =>
                     $audiobook->duration_seconds,
@@ -849,18 +973,24 @@ class CartController extends Controller
                 === CartItem::TYPE_COURSE
             && $cartItem->course
         ) {
-            $course = $cartItem->course;
+            $course =
+                $cartItem->course;
 
             $data['course'] = [
-                'id' => $course->id,
+                'id' =>
+                    $course->id,
 
-                'uuid' => $course->uuid,
+                'uuid' =>
+                    $course->uuid,
 
-                'title' => $course->title,
+                'title' =>
+                    $course->title,
 
-                'slug' => $course->slug,
+                'slug' =>
+                    $course->slug,
 
-                'subtitle' => $course->subtitle,
+                'subtitle' =>
+                    $course->subtitle,
 
                 'description' =>
                     $course->description,
@@ -868,21 +998,78 @@ class CartController extends Controller
                 'cover_image' =>
                     $course->cover_image,
 
-                'price' => number_format(
-                    (float) $course->price,
-                    2,
-                    '.',
-                    ''
-                ),
+                'price' =>
+                    number_format(
+                        (float) $course->price,
+                        2,
+                        '.',
+                        ''
+                    ),
 
                 'currency' =>
-                    $course->currency,
+                    strtoupper(
+                        $course->currency
+                    ),
 
                 'status' =>
                     $course->status,
 
                 'published_at' =>
                     $course->published_at,
+            ];
+        }
+
+        /*
+         * Bundle.
+         */
+        if (
+            $cartItem->item_type
+                === CartItem::TYPE_BUNDLE
+            && $cartItem->bundle
+        ) {
+            $bundle =
+                $cartItem->bundle;
+
+            $data['bundle'] = [
+                'id' =>
+                    $bundle->id,
+
+                'uuid' =>
+                    $bundle->uuid,
+
+                'name' =>
+                    $bundle->name,
+
+                'slug' =>
+                    $bundle->slug,
+
+                'description' =>
+                    $bundle->description,
+
+                'cover_image' =>
+                    $bundle->cover_image,
+
+                'price' =>
+                    number_format(
+                        (float) $bundle->price,
+                        2,
+                        '.',
+                        ''
+                    ),
+
+                'currency' =>
+                    strtoupper(
+                        $bundle->currency
+                    ),
+
+                'is_active' =>
+                    (bool) $bundle->is_active,
+
+                'is_published' =>
+                    (bool) $bundle->is_published,
+
+                'published_at' =>
+                    $bundle->published_at,
             ];
         }
 

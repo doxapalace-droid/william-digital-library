@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\BookController;
 use App\Http\Controllers\Api\BookDownloadController;
 use App\Http\Controllers\Api\BookReaderController;
 use App\Http\Controllers\Api\BookmarkController;
+use App\Http\Controllers\Api\BundleController;
 use App\Http\Controllers\Api\CartController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CheckoutController;
@@ -47,6 +48,9 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 | PUBLIC API
 |--------------------------------------------------------------------------
+|
+| These routes do not require authentication.
+|
 */
 
 
@@ -59,7 +63,7 @@ use Illuminate\Support\Facades\Route;
 Route::get('/books', [
     BookController::class,
     'index',
-]);
+])->name('books.index');
 
 /*
  * IMPORTANT:
@@ -68,12 +72,12 @@ Route::get('/books', [
 Route::get('/books/search', [
     BookController::class,
     'search',
-]);
+])->name('books.search');
 
 Route::get('/books/{slug}', [
     BookController::class,
     'show',
-]);
+])->name('books.show');
 
 
 /*
@@ -85,12 +89,12 @@ Route::get('/books/{slug}', [
 Route::get('/categories', [
     CategoryController::class,
     'index',
-]);
+])->name('categories.index');
 
 Route::get('/categories/{category}', [
     CategoryController::class,
     'show',
-]);
+])->name('categories.show');
 
 
 /*
@@ -102,12 +106,12 @@ Route::get('/categories/{category}', [
 Route::get('/authors', [
     AuthorController::class,
     'index',
-]);
+])->name('authors.index');
 
 Route::get('/authors/{author}', [
     AuthorController::class,
     'show',
-]);
+])->name('authors.show');
 
 
 /*
@@ -123,17 +127,17 @@ Route::get('/authors/{author}', [
 Route::get('/audiobooks', [
     AudiobookController::class,
     'index',
-]);
+])->name('audiobooks.index');
 
 Route::get('/audiobooks/{audiobook}', [
     AudiobookController::class,
     'show',
-]);
+])->name('audiobooks.show');
 
 Route::get('/audiobooks/{audiobook}/chapters', [
     AudiobookChapterController::class,
     'index',
-]);
+])->name('audiobooks.chapters.index');
 
 
 /*
@@ -145,12 +149,12 @@ Route::get('/audiobooks/{audiobook}/chapters', [
 Route::get('/videos', [
     VideoController::class,
     'index',
-]);
+])->name('videos.index');
 
 Route::get('/videos/{video}', [
     VideoController::class,
     'show',
-]);
+])->name('videos.show');
 
 
 /*
@@ -162,22 +166,22 @@ Route::get('/videos/{video}', [
 Route::get('/podcasts', [
     PodcastController::class,
     'index',
-]);
+])->name('podcasts.index');
 
 Route::get('/podcasts/{podcast}', [
     PodcastController::class,
     'show',
-]);
+])->name('podcasts.show');
 
 Route::get('/podcasts/{podcast}/episodes', [
     PodcastEpisodeController::class,
     'index',
-]);
+])->name('podcasts.episodes.index');
 
 Route::get('/podcasts/{podcast}/episodes/{episode}', [
     PodcastEpisodeController::class,
     'show',
-]);
+])->name('podcasts.episodes.show');
 
 
 /*
@@ -217,12 +221,12 @@ Route::get(
 Route::get('/courses', [
     CourseController::class,
     'index',
-]);
+])->name('courses.index');
 
 Route::get('/courses/{course}', [
     CourseController::class,
     'show',
-]);
+])->name('courses.show');
 
 
 /*
@@ -241,12 +245,12 @@ Route::get('/courses/{course}', [
 Route::get('/courses/{course}/lessons/{lesson}', [
     CourseLessonController::class,
     'show',
-]);
+])->name('courses.lessons.show');
 
 
 /*
 |--------------------------------------------------------------------------
-| MEMBERSHIP PLANS
+| Membership Plans
 |--------------------------------------------------------------------------
 |
 | Membership plans are public catalogue data.
@@ -261,12 +265,40 @@ Route::get('/courses/{course}/lessons/{lesson}', [
 Route::get('/membership-plans', [
     MembershipPlanController::class,
     'index',
-]);
+])->name('membership-plans.index');
 
 Route::get('/membership-plans/{membershipPlan}', [
     MembershipPlanController::class,
     'show',
-]);
+])->name('membership-plans.show');
+
+
+/*
+|--------------------------------------------------------------------------
+| Bundles
+|--------------------------------------------------------------------------
+|
+| Bundles are public catalogue products.
+|
+| Customers can:
+|
+| - view all published bundles
+| - view one published bundle
+|
+| Purchasing a bundle is handled separately through
+| the authenticated cart/checkout system.
+|
+*/
+
+Route::get('/bundles', [
+    BundleController::class,
+    'index',
+])->name('bundles.index');
+
+Route::get('/bundles/{bundle}', [
+    BundleController::class,
+    'show',
+])->name('bundles.show');
 
 
 /*
@@ -295,17 +327,17 @@ Route::middleware([
     Route::post('/books', [
         BookController::class,
         'store',
-    ]);
+    ])->name('admin.books.store');
 
     Route::put('/books/{uuid}', [
         BookController::class,
         'update',
-    ]);
+    ])->name('admin.books.update');
 
     Route::delete('/books/{uuid}', [
         BookController::class,
         'destroy',
-    ]);
+    ])->name('admin.books.destroy');
 
 
     /*
@@ -317,17 +349,17 @@ Route::middleware([
     Route::post('/categories', [
         CategoryController::class,
         'store',
-    ]);
+    ])->name('admin.categories.store');
 
     Route::put('/categories/{category}', [
         CategoryController::class,
         'update',
-    ]);
+    ])->name('admin.categories.update');
 
     Route::delete('/categories/{category}', [
         CategoryController::class,
         'destroy',
-    ]);
+    ])->name('admin.categories.destroy');
 
 
     /*
@@ -350,22 +382,22 @@ Route::middleware([
     Route::post('/authors', [
         AuthorController::class,
         'store',
-    ]);
+    ])->name('admin.authors.store');
 
     Route::put('/authors/{author}', [
         AuthorController::class,
         'update',
-    ]);
+    ])->name('admin.authors.update');
 
     Route::patch('/authors/{author}', [
         AuthorController::class,
         'update',
-    ]);
+    ])->name('admin.authors.update.patch');
 
     Route::delete('/authors/{author}', [
         AuthorController::class,
         'destroy',
-    ]);
+    ])->name('admin.authors.destroy');
 
 
     /*
@@ -377,32 +409,32 @@ Route::middleware([
     Route::get('/audiobooks', [
         AdminAudiobookController::class,
         'index',
-    ]);
+    ])->name('admin.audiobooks.index');
 
     Route::post('/audiobooks', [
         AdminAudiobookController::class,
         'store',
-    ]);
+    ])->name('admin.audiobooks.store');
 
     Route::get('/audiobooks/{audiobook}', [
         AdminAudiobookController::class,
         'show',
-    ]);
+    ])->name('admin.audiobooks.show');
 
     Route::put('/audiobooks/{audiobook}', [
         AdminAudiobookController::class,
         'update',
-    ]);
+    ])->name('admin.audiobooks.update');
 
     Route::patch('/audiobooks/{audiobook}', [
         AdminAudiobookController::class,
         'update',
-    ]);
+    ])->name('admin.audiobooks.update.patch');
 
     Route::delete('/audiobooks/{audiobook}', [
         AdminAudiobookController::class,
         'destroy',
-    ]);
+    ])->name('admin.audiobooks.destroy');
 
 
     /*
@@ -414,32 +446,32 @@ Route::middleware([
     Route::get('/audiobooks/{audiobook}/chapters', [
         AdminAudiobookChapterController::class,
         'index',
-    ]);
+    ])->name('admin.audiobooks.chapters.index');
 
     Route::post('/audiobooks/{audiobook}/chapters', [
         AdminAudiobookChapterController::class,
         'store',
-    ]);
+    ])->name('admin.audiobooks.chapters.store');
 
     Route::get('/audiobooks/{audiobook}/chapters/{chapter}', [
         AdminAudiobookChapterController::class,
         'show',
-    ]);
+    ])->name('admin.audiobooks.chapters.show');
 
     Route::put('/audiobooks/{audiobook}/chapters/{chapter}', [
         AdminAudiobookChapterController::class,
         'update',
-    ]);
+    ])->name('admin.audiobooks.chapters.update');
 
     Route::patch('/audiobooks/{audiobook}/chapters/{chapter}', [
         AdminAudiobookChapterController::class,
         'update',
-    ]);
+    ])->name('admin.audiobooks.chapters.update.patch');
 
     Route::delete('/audiobooks/{audiobook}/chapters/{chapter}', [
         AdminAudiobookChapterController::class,
         'destroy',
-    ]);
+    ])->name('admin.audiobooks.chapters.destroy');
 
 
     /*
@@ -451,17 +483,17 @@ Route::middleware([
     Route::get('/orders', [
         AdminOrderController::class,
         'index',
-    ]);
+    ])->name('admin.orders.index');
 
     Route::get('/orders/{uuid}', [
         AdminOrderController::class,
         'show',
-    ]);
+    ])->name('admin.orders.show');
 
     Route::put('/orders/{uuid}', [
         AdminOrderController::class,
         'update',
-    ]);
+    ])->name('admin.orders.update');
 });
 
 
@@ -469,6 +501,9 @@ Route::middleware([
 |--------------------------------------------------------------------------
 | AUTHENTICATED CUSTOMER API
 |--------------------------------------------------------------------------
+|
+| All routes below require a logged-in customer.
+|
 */
 
 Route::middleware('auth:sanctum')->group(function () {
@@ -481,7 +516,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/user', function (Request $request) {
         return $request->user();
-    });
+    })->name('user.current');
 
 
     /*
@@ -493,12 +528,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/orders', [
         OrderController::class,
         'index',
-    ]);
+    ])->name('orders.index');
 
     Route::get('/orders/{uuid}', [
         OrderController::class,
         'show',
-    ]);
+    ])->name('orders.show');
 
 
     /*
@@ -517,17 +552,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/subscription', [
         SubscriptionController::class,
         'current',
-    ]);
+    ])->name('subscription.current');
 
     Route::post('/subscriptions', [
         SubscriptionController::class,
         'store',
-    ]);
+    ])->name('subscriptions.store');
 
     Route::post('/subscriptions/{subscription}/cancel', [
         SubscriptionController::class,
         'cancel',
-    ]);
+    ])->name('subscriptions.cancel');
 
 
     /*
@@ -539,32 +574,32 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/books/{uuid}/reviews', [
         ReviewController::class,
         'index',
-    ]);
+    ])->name('books.reviews.index');
 
     Route::get('/books/{uuid}/reviews/statistics', [
         ReviewController::class,
         'statistics',
-    ]);
+    ])->name('books.reviews.statistics');
 
     Route::post('/books/{uuid}/reviews', [
         ReviewController::class,
         'store',
-    ]);
+    ])->name('books.reviews.store');
 
     Route::put('/books/{uuid}/reviews/{review}', [
         ReviewController::class,
         'update',
-    ]);
+    ])->name('books.reviews.update');
 
     Route::patch('/books/{uuid}/reviews/{review}', [
         ReviewController::class,
         'update',
-    ]);
+    ])->name('books.reviews.update.patch');
 
     Route::delete('/books/{uuid}/reviews/{review}', [
         ReviewController::class,
         'destroy',
-    ]);
+    ])->name('books.reviews.destroy');
 
 
     /*
@@ -576,22 +611,22 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/orders/{uuid}/payments', [
         PaymentController::class,
         'index',
-    ]);
+    ])->name('orders.payments.index');
 
     Route::post('/payments', [
         PaymentController::class,
         'store',
-    ]);
+    ])->name('payments.store');
 
     Route::get('/payments/{uuid}', [
         PaymentController::class,
         'show',
-    ]);
+    ])->name('payments.show');
 
     Route::post('/payments/{uuid}/verify', [
         PaymentController::class,
         'verify',
-    ]);
+    ])->name('payments.verify');
 
 
     /*
@@ -603,17 +638,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/cart', [
         CartController::class,
         'index',
-    ]);
+    ])->name('cart.index');
 
     Route::post('/cart', [
         CartController::class,
         'store',
-    ]);
+    ])->name('cart.store');
 
     Route::delete('/cart/{uuid}', [
         CartController::class,
         'destroy',
-    ]);
+    ])->name('cart.destroy');
 
 
     /*
@@ -625,12 +660,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/checkout', [
         CheckoutController::class,
         'index',
-    ]);
+    ])->name('checkout.index');
 
     Route::post('/checkout', [
         CheckoutController::class,
         'store',
-    ]);
+    ])->name('checkout.store');
 
 
     /*
@@ -651,17 +686,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/free-products/books/{book}/claim', [
         FreeProductController::class,
         'claimBook',
-    ]);
+    ])->name('free-products.books.claim');
 
     Route::post('/free-products/audiobooks/{audiobook}/claim', [
         FreeProductController::class,
         'claimAudiobook',
-    ]);
+    ])->name('free-products.audiobooks.claim');
 
     Route::post('/free-products/courses/{course}/claim', [
         FreeProductController::class,
         'claimCourse',
-    ]);
+    ])->name('free-products.courses.claim');
 
 
     /*
@@ -680,7 +715,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/my-library', [
         MyLibraryController::class,
         'index',
-    ]);
+    ])->name('my-library.index');
 
 
     /*
@@ -692,7 +727,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/continue-reading', [
         ContinueReadingController::class,
         'index',
-    ]);
+    ])->name('continue-reading.index');
 
 
     /*
@@ -704,12 +739,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/recently-viewed', [
         RecentlyViewedController::class,
         'index',
-    ]);
+    ])->name('recently-viewed.index');
 
     Route::post('/books/{uuid}/recently-viewed', [
         RecentlyViewedController::class,
         'store',
-    ]);
+    ])->name('books.recently-viewed.store');
 
 
     /*
@@ -721,7 +756,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/recommendations', [
         RecommendationController::class,
         'index',
-    ]);
+    ])->name('recommendations.index');
 
 
     /*
@@ -733,17 +768,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/reader-preferences', [
         ReaderPreferenceController::class,
         'show',
-    ]);
+    ])->name('reader-preferences.show');
 
     Route::post('/reader-preferences', [
         ReaderPreferenceController::class,
         'store',
-    ]);
+    ])->name('reader-preferences.store');
 
     Route::put('/reader-preferences', [
         ReaderPreferenceController::class,
         'update',
-    ]);
+    ])->name('reader-preferences.update');
 
 
     /*
@@ -755,7 +790,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/books/{book}/read', [
         BookReaderController::class,
         'show',
-    ]);
+    ])->name('books.read');
 
 
     /*
@@ -767,7 +802,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/books/{book}/download', [
         BookDownloadController::class,
         'download',
-    ]);
+    ])->name('books.download');
 
 
     /*
@@ -791,7 +826,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/audiobooks/{audiobook}/download', [
         AudiobookDownloadController::class,
         'download',
-    ]);
+    ])->name('audiobooks.download');
 
 
     /*
@@ -803,12 +838,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/audiobooks/{audiobook}/progress', [
         AudiobookListeningProgressController::class,
         'show',
-    ]);
+    ])->name('audiobooks.progress.show');
 
     Route::put('/audiobooks/{audiobook}/progress', [
         AudiobookListeningProgressController::class,
         'update',
-    ]);
+    ])->name('audiobooks.progress.update');
 
 
     /*
@@ -820,7 +855,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/podcast-progress/continue-listening', [
         PodcastEpisodeProgressController::class,
         'continueListening',
-    ]);
+    ])->name('podcast-progress.continue-listening');
 
 
     /*
@@ -835,7 +870,7 @@ Route::middleware('auth:sanctum')->group(function () {
             PodcastEpisodeProgressController::class,
             'show',
         ]
-    );
+    )->name('podcasts.episodes.progress.show');
 
     Route::put(
         '/podcasts/{podcast}/episodes/{episode}/progress',
@@ -843,7 +878,7 @@ Route::middleware('auth:sanctum')->group(function () {
             PodcastEpisodeProgressController::class,
             'update',
         ]
-    );
+    )->name('podcasts.episodes.progress.update');
 
     Route::post(
         '/podcasts/{podcast}/episodes/{episode}/progress/complete',
@@ -851,7 +886,7 @@ Route::middleware('auth:sanctum')->group(function () {
             PodcastEpisodeProgressController::class,
             'complete',
         ]
-    );
+    )->name('podcasts.episodes.progress.complete');
 
 
     /*
@@ -863,12 +898,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/books/{uuid}/progress', [
         ReadingProgressController::class,
         'show',
-    ]);
+    ])->name('books.progress.show');
 
     Route::put('/books/{uuid}/progress', [
         ReadingProgressController::class,
         'update',
-    ]);
+    ])->name('books.progress.update');
 
 
     /*
@@ -880,7 +915,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/courses/{course}/progress', [
         CourseLessonProgressController::class,
         'course',
-    ]);
+    ])->name('courses.progress');
 
     Route::get(
         '/courses/{course}/lessons/{lesson}/progress',
@@ -888,7 +923,7 @@ Route::middleware('auth:sanctum')->group(function () {
             CourseLessonProgressController::class,
             'show',
         ]
-    );
+    )->name('courses.lessons.progress.show');
 
     Route::put(
         '/courses/{course}/lessons/{lesson}/progress',
@@ -896,7 +931,7 @@ Route::middleware('auth:sanctum')->group(function () {
             CourseLessonProgressController::class,
             'update',
         ]
-    );
+    )->name('courses.lessons.progress.update');
 
     Route::post(
         '/courses/{course}/lessons/{lesson}/complete',
@@ -904,7 +939,7 @@ Route::middleware('auth:sanctum')->group(function () {
             CourseLessonProgressController::class,
             'complete',
         ]
-    );
+    )->name('courses.lessons.complete');
 
 
     /*
@@ -916,17 +951,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/books/{uuid}/favorites', [
         FavoriteController::class,
         'show',
-    ]);
+    ])->name('books.favorites.show');
 
     Route::post('/books/{uuid}/favorites', [
         FavoriteController::class,
         'store',
-    ]);
+    ])->name('books.favorites.store');
 
     Route::delete('/books/{uuid}/favorites', [
         FavoriteController::class,
         'destroy',
-    ]);
+    ])->name('books.favorites.destroy');
 
 
     /*
@@ -938,12 +973,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/books/{uuid}/bookmarks', [
         BookmarkController::class,
         'index',
-    ]);
+    ])->name('books.bookmarks.index');
 
     Route::post('/books/{uuid}/bookmarks', [
         BookmarkController::class,
         'store',
-    ]);
+    ])->name('books.bookmarks.store');
 
     Route::delete(
         '/books/{uuid}/bookmarks/{bookmark}',
@@ -951,7 +986,7 @@ Route::middleware('auth:sanctum')->group(function () {
             BookmarkController::class,
             'destroy',
         ]
-    );
+    )->name('books.bookmarks.destroy');
 
 
     /*
@@ -963,27 +998,27 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/books/{uuid}/highlights', [
         HighlightController::class,
         'index',
-    ]);
+    ])->name('books.highlights.index');
 
     Route::post('/books/{uuid}/highlights', [
         HighlightController::class,
         'store',
-    ]);
+    ])->name('books.highlights.store');
 
     Route::put('/books/{uuid}/highlights/{highlight}', [
         HighlightController::class,
         'update',
-    ]);
+    ])->name('books.highlights.update');
 
     Route::patch('/books/{uuid}/highlights/{highlight}', [
         HighlightController::class,
         'update',
-    ]);
+    ])->name('books.highlights.update.patch');
 
     Route::delete('/books/{uuid}/highlights/{highlight}', [
         HighlightController::class,
         'destroy',
-    ]);
+    ])->name('books.highlights.destroy');
 
 
     /*
@@ -995,25 +1030,25 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/books/{uuid}/notes', [
         ReadingNoteController::class,
         'index',
-    ]);
+    ])->name('books.notes.index');
 
     Route::post('/books/{uuid}/notes', [
         ReadingNoteController::class,
         'store',
-    ]);
+    ])->name('books.notes.store');
 
     Route::put('/books/{uuid}/notes/{readingNote}', [
         ReadingNoteController::class,
         'update',
-    ]);
+    ])->name('books.notes.update');
 
     Route::patch('/books/{uuid}/notes/{readingNote}', [
         ReadingNoteController::class,
         'update',
-    ]);
+    ])->name('books.notes.update.patch');
 
     Route::delete('/books/{uuid}/notes/{readingNote}', [
         ReadingNoteController::class,
         'destroy',
-    ]);
+    ])->name('books.notes.destroy');
 });
